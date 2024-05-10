@@ -1,28 +1,34 @@
-from fastapi import APIRouter
+import os
+import pymongo
+import dotenv
+from redbaby.database import DB
 
-# ## operations
+from .schemas import CustomSorting, CustomSortingWithResource
 
-# ### read sorted
+# TODO: add on env and settings
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("DB_NAME")
 
-# sortings.filter(resource, user, typ).join(resource).sort(position)
+# db connection to add custom sortings
+DB.add_conn(
+    db_name=DB_NAME,
+    uri=MONGO_URI,
+    alias="default",
+    start_client=True,
+)
 
-# - GET /sortings/{resource}
+class Sortings:
 
-# ### reorder one
+    # copilot suggested it, maybe change it later
+    def __init__(self):
+        self.sortings = DB.get()["custom-sortings"]
 
-# - PUT /sortings/{resource}/:position
-#   - {id}
-#   -> 204
+    # upsert_one(filters,data)
+    def reorder_one(self): 
+        pass
 
-# ### delete one
-
-# - DELETE /sortings/{resource}/:position
-#   -> 204
-
-# - vai criar buracos.
-
-# ### reorder many
-
-# - PUT /sortings/{resource}
-#   - [id, id, ...]
-#   -> 204
+    def join(self, resource : CustomSorting | CustomSortingWithResource) -> list:
+        # sortings.filter(res.$ref, user).join(resource).sort(position)
+        
+        return []
+    
