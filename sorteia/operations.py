@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 from bson import ObjectId
+from fastapi import BackgroundTasks
 import pymongo
 import dotenv
 
@@ -59,4 +60,22 @@ class Sortings:
         # sortings.filter(res.$ref, user).join(resource).sort(position)
         
         return []
+
     
+    def delete_one(self, position: int, creator: Creator, background_task: BackgroundTasks):
+        """
+        position: int position to be deleted
+        background_task: BackgroundTasks object (comes from route dependency)
+        """
+        user_email = creator.user_email
+
+        filter = {"position": position}
+        result = self.sortings.delete_one(filter)
+
+        if result.deleted_count == 0:
+            raise 
+
+        background_task.add_task(self.sortings.update_many, filter={"position": {"$gt": position}, "resource_ref": {"$ref"}}, update={"$inc": {"position": -1}})
+        return result
+    
+
