@@ -43,7 +43,10 @@ class Sortings:
         position: int position to be set
         """
 
-        filter = {"resource_ref": {"$ref": self.collection, "$id": resource_id}}
+        filter = {
+            "resource_ref": {"$ref": self.collection, "$id": resource_id},
+            "created_by.user_email": creator.user_email,
+        }
 
         custom_sorting = {
             "position": position,
@@ -63,6 +66,35 @@ class Sortings:
             raise CustomOrderNotSaved
 
         return result
+
+    def reorder_many(
+        self,
+        resources: list,
+        creator: Creator,
+    ):
+        self.sortings.bulk_write(
+            [
+                pymongo.UpdateOne(
+                    filter={
+                        "resource_ref.$ref": self.collection,
+                        "resource_ref.$id": resource._id,
+                        "created_by.user_email": creator.user_email,
+                    },
+                    update={
+                        "$set": {
+                            "position": i,
+                            "updated_at": datetime.now(),
+                        },
+                        "$setOnInsert": {
+                            "created_at": datetime.now(),
+                            "created_by": creator.model_dump(by_alias=True),
+                        },
+                    },
+                    upsert=True,
+                )
+                for i, resource in enumerate(resources)
+            ]
+        )
 
     def read_many(self) -> list[CustomSorting]:
         """
