@@ -11,6 +11,7 @@ from tauth.schemas import Creator
 
 from .schemas import CustomSorting, CustomSortingWithResource
 from .exceptions import CustomOrderNotSaved
+from .models import CustomSortingDAO
 
 # TODO: add on env and settings
 MONGO_URI = os.getenv("MONGO_URI")
@@ -27,7 +28,6 @@ DB.add_conn(
 
 class Sortings:
 
-    # copilot suggested it, maybe change it later
     def __init__(self, collection_name: str):
         """
         collection_name: collection name of the elements to be sorted
@@ -159,3 +159,9 @@ class Sortings:
             update={"$inc": {"position": -1}},
         )
         return result
+
+    def create_search_indexes(self):
+        """
+        Creates the indexes needed for the custom sortings.
+        """
+        CustomSortingDAO.create_indexes()
