@@ -1,2 +1,4 @@
 tauth
 redbaby 
+pymongo
+fastapi

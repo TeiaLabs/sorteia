@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+from annotated_types import T
 from bson import ObjectId
 from fastapi import BackgroundTasks
 import pymongo
@@ -23,6 +24,7 @@ DB.add_conn(
     start_client=True,
 )
 
+
 class Sortings:
 
     # copilot suggested it, maybe change it later
@@ -33,9 +35,9 @@ class Sortings:
         self.collection = collection_name
         self.sortings = DB.get()["custom-sortings"]
 
-
-    def reorder_one(self, creator: Creator, resource_id: ObjectId, position: int ): 
+    def reorder_one(self, creator: Creator, resource_id: ObjectId, position: int):
         """
+        Reorders a resource in the custom order.
         creator: Creator object
         resource_id: ObjectId of the resource to be ordered
         position: int position to be set
@@ -48,21 +50,65 @@ class Sortings:
             "resource_ref": {"$ref": self.collection, "$id": resource_id},
             "updated_at": datetime.now(),
         }
-        update = {"$set": custom_sorting, "$setOnInsert": {'created_at': datetime.now(), "created_by": creator.model_dump(by_alias=True)}}
+        update = {
+            "$set": custom_sorting,
+            "$setOnInsert": {
+                "created_at": datetime.now(),
+                "created_by": creator.model_dump(by_alias=True),
+            },
+        }
 
         result = self.sortings.update_one(filter=filter, update=update, upsert=True)
         if result.modified_count == 0 and result.upserted_id is None:
             raise CustomOrderNotSaved
-        
+
         return result
 
-    def join(self, resource_id: str) -> list:
-        # sortings.filter(res.$ref, user).join(resource).sort(position)
-        
-        return []
+    def read_many(self) -> list[CustomSorting]:
+        """
+        Returns the objects in the order they were sorted.
+        """
 
-    
-    def delete_one(self, position: int, creator: Creator, background_task: BackgroundTasks):
+        custom_sortings = self.sortings.find(
+            filter={
+                "resource_ref.$ref": self.collection,
+            }
+        ).sort("position", pymongo.ASCENDING)
+
+        return [CustomSorting(**custom_sorting) for custom_sorting in custom_sortings]
+
+    def read_many_whole_object(self) -> list[CustomSortingWithResource[T]]:
+        """
+        Returns the objects in the order they were sorted.
+        """
+
+        custom_sortings = self.sortings.aggregate(
+            [
+                {
+                    "$match": {
+                        "resource_ref.$ref": self.collection,
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": self.collection,
+                        "localField": "resource_ref.$id",
+                        "foreignField": "_id",
+                        "as": "resource",
+                    }
+                },
+                {"$sort": {"position": pymongo.ASCENDING}},
+            ]
+        )
+
+        return [
+            CustomSortingWithResource(**custom_sorting)
+            for custom_sorting in custom_sortings
+        ]
+
+    def delete_one(
+        self, position: int, creator: Creator, background_task: BackgroundTasks
+    ):
         """
         position: int position to be deleted
         background_task: BackgroundTasks object (comes from route dependency)
@@ -73,9 +119,11 @@ class Sortings:
         result = self.sortings.delete_one(filter)
 
         if result.deleted_count == 0:
-            raise 
+            raise
 
-        background_task.add_task(self.sortings.update_many, filter={"position": {"$gt": position}, "resource_ref": {"$ref"}}, update={"$inc": {"position": -1}})
+        background_task.add_task(
+            self.sortings.update_many,
+            filter={"position": {"$gt": position}, "resource_ref": {"$ref"}},
+            update={"$inc": {"position": -1}},
+        )
         return result
-    
-
