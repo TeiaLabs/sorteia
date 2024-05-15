@@ -1,4 +1,4 @@
-from dataclasses import Field
+from pydantic import Field
 import datetime
 from bson import ObjectId
 from tauth.schemas import Creator
