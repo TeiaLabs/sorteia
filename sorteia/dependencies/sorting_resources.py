@@ -19,12 +19,11 @@ from ..schemas import (
 def add_sorting_resources_dependency(app: FastAPI) -> None:
     router = APIRouter(prefix="/sortings", tags=["sortings"])
 
-    # TODO: fix the header literal types
     @router.get("/{resource}", status_code=200)
     def get_sortings(  # type: ignore
         resource: str,
         sort: Literal["position"] = Query(default="position", alias="sort"),
-        resolve_refs: Literal["$resource", "no"] = Header(
+        resolve_refs: Literal["$resource_ref", "no"] = Header(
             default="no", alias="X-Resolve-Refs"
         ),
         creator: Creator = Depends(privileges.is_valid_user),
@@ -32,10 +31,9 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         """
         resource: str resource name
         """
-        if resolve_refs == "$resource":
-            return Sortings(resource).read_many_whole_object()
-
-        return Sortings(resource).read_many()
+        if resolve_refs == "$resource_ref":
+            return Sortings(resource).read_many_whole_object(creator=creator)
+        return Sortings(resource).read_many(creator=creator)
 
     @router.put("/{resource}/{position}", status_code=201)
     def reorder_one(  # type: ignore
