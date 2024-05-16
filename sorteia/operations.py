@@ -167,7 +167,10 @@ class Sortings:
                     {
                         "$addFields": {
                             "resource_ref": {
-                                "$arrayElemAt": [{"$objectToArray": "resource_ref"}, 1]
+                                "$arrayElemAt": [
+                                    {"$objectToArray": "resource_ref"},
+                                    1,
+                                ]  # expected document, not string
                             }
                         }
                     },
