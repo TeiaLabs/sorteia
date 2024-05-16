@@ -9,6 +9,7 @@ import pymongo.results
 from annotated_types import T
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks
+from loguru import logger
 from redbaby.database import DB  # type: ignore
 from tauth.schemas import Creator  # type: ignore
 
@@ -38,11 +39,10 @@ class Sortings:
         """
         collection_name: collection name of the elements to be sorted
         """
-        print("Creating the sortings thingy")
+        logger.debug(f"Initializing Sortings for {collection_name}")
         self.collection: str = collection_name
         self.sortings = DB.get()["custom-sortings"]  # type: ignore
         self.create_search_indexes()
-        print("Created the sortings thingy")
 
     def reorder_one(
         self, creator: Creator, resource_id: PyObjectId, position: int
@@ -83,12 +83,10 @@ class Sortings:
                 updated_at=updated_at,
                 created_by=creator,
             )
-        elif result.modified_count == 1:
-            from rich import print
-
-            print(result.raw_result)
+        elif result.modified_count == 1 or result.matched_count == 1:
+            object = self.sortings.find_one(filter=filter)
             return ReorderOneUpdatedOut(
-                id=PyObjectId("hi"),
+                id=object["_id"],
                 updated_at=updated_at,
             )
         else:
@@ -103,13 +101,13 @@ class Sortings:
             [
                 pymongo.UpdateOne(
                     filter={
-                        "resource_ref.$ref": self.collection,
-                        "resource_ref.$id": resource._id,
+                        "resource_ref.$ref": resource.resource_ref,
+                        "resource_ref.$id": resource.resource_id,
                         "created_by.user_email": creator.user_email,
                     },
                     update={
                         "$set": {
-                            "position": i,
+                            "position": resource.position,
                             "updated_at": datetime.now(),
                         },
                         "$setOnInsert": {
@@ -119,12 +117,12 @@ class Sortings:
                     },
                     upsert=True,
                 )
-                for i, resource in enumerate(resources)
+                for resource in resources
             ]
         )
         return result
 
-    def read_many(self) -> list[CustomSorting]:
+    def read_many(self, creator: Creator) -> list[CustomSorting]:
         """
         Returns the objects in the order they were sorted.
         """
@@ -133,70 +131,98 @@ class Sortings:
         custom_sortings: pymongo.cursor.Cursor[Any] = self.sortings.find(
             filter={
                 "resource_ref.$ref": self.collection,
+                "created_by.user_email": creator.user_email,
             }
         ).sort("position", pymongo.ASCENDING)
 
-        return [CustomSorting(**custom_sorting) for custom_sorting in custom_sortings]
+        return list(custom_sortings)
 
     def read_many_whole_object(
-        self,
+        self, creator: Creator
     ) -> list[CustomSortingWithResource[T]]:
         """
         Returns the objects in the order they were sorted.
         """
-
         # TODO: change this Any to specific type
         custom_sortings: pymongo.command_cursor.CommandCursor[Any] = (
             self.sortings.aggregate(
+                # [
+                #     {
+                #         "$match": {
+                #             "resource_ref.$ref": self.collection,
+                #             "created_by.user_email": creator.user_email,
+                #         }
+                #     },
+                #     # {
+                #     #     "$lookup": {
+                #     #         "from": self.collection,
+                #     #         "localField": "resource_ref.$id",
+                #     #         "foreignField": "_id",
+                #     #         "as": "resource",
+                #     #     }
+                #     # },
+                #     {"$sort": {"position": pymongo.ASCENDING}},
+                # ]
                 [
                     {
-                        "$match": {
-                            "resource_ref.$ref": self.collection,
+                        "$addFields": {
+                            "resource_ref": {
+                                "$arrayElemAt": [{"$objectToArray": "resource_ref"}, 1]
+                            }
                         }
                     },
+                    {"$addFields": {"resource_ref": "resource_ref.v"}},
                     {
                         "$lookup": {
                             "from": self.collection,
-                            "localField": "resource_ref.$id",
+                            "localField": "resource_ref",
                             "foreignField": "_id",
                             "as": "resource",
                         }
                     },
-                    {"$sort": {"position": pymongo.ASCENDING}},
+                    {
+                        "$addFields": {
+                            "resource_ref": {"$arrayElemAt": ["$resource_ref", 0]}
+                        }
+                    },
                 ]
             )
         )
-
-        return [
-            CustomSortingWithResource(**custom_sorting)
-            for custom_sorting in custom_sortings
-        ]
+        return list(custom_sortings)
 
     def delete_one(
-        self, position: int, creator: Creator, background_task: BackgroundTasks
+        self, position: int, creator: Creator, background_task: BackgroundTasks | None
     ) -> pymongo.results.DeleteResult:
         """
-        position: int position to be deleted
-        background_task: BackgroundTasks object (comes from route dependency)
-        """
-        # user_email = creator.user_email
+        Deletes a resource from the custom order according to the position.
 
-        filter = {"position": position}
+        position: int position to be deleted
+        background_task: BackgroundTasks object (comes from route dependency), send None to not update the other objects positions after deletion
+        """
+        user_email = creator.user_email
+
+        filter = {"position": position, "created_by.user_email": user_email}
         result: pymongo.results.DeleteResult = self.sortings.delete_one(filter)
 
         if result.deleted_count == 0:
             raise CustomOrderNotFound
 
-        background_task.add_task(
-            self.sortings.update_many,
-            filter={"position": {"$gt": position}, "resource_ref": {"$ref"}},
-            update={"$inc": {"position": -1}},
-        )
+        if background_task is not None:
+            background_task.add_task(
+                self.sortings.update_many,
+                filter={
+                    "position": {"$gt": position},
+                    "resource_ref": {"$ref"},
+                    "created_by.user_email": user_email,
+                },
+                update={"$inc": {"position": -1}},
+            )
         return result
 
     def create_search_indexes(self) -> None:
         """
         Creates the indexes needed for the custom sortings.
         """
+        logger.debug("Creating indexes for custom sortings")
         self.sortings.create_index([("resource.$ref", pymongo.ASCENDING)])
         self.sortings.create_index([("position", pymongo.ASCENDING)])
