@@ -1,5 +1,6 @@
 # type: ignore
 from typing import Any
+
 from bson import ObjectId
 from bson.objectid import ObjectId as BsonObjectId
 from pydantic.json_schema import JsonSchemaValue

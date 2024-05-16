@@ -17,7 +17,7 @@ def read_multiline_as_list(file_path: Path | str) -> list[str]:
 
 def get_optional_requirements() -> dict[str, list[str]]:
     """Get dict of suffix -> list of requirements."""
-    name = lambda p: p.stem.split("-")[-1]
+    name = lambda p: p.stem.split("-")[-1]  # type: ignore
     requirements_files = Path(".").glob(r"requirements-*.txt")
     return {name(p): read_multiline_as_list(p) for p in requirements_files}
 
