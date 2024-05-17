@@ -13,14 +13,17 @@ from loguru import logger
 from redbaby.database import DB  # type: ignore
 from tauth.schemas import Creator  # type: ignore
 
-from .exceptions import CustomOrderNotFound, CustomOrderNotSaved
+from .exceptions import (
+    CustomOrderNotFound,
+    CustomOrderNotSaved,
+    ObjectToBeSortedNotFound,
+)
 from .models import CustomSorting, CustomSortingWithResource
 from .schemas import ReorderManyResourcesIn, ReorderOneUpdatedOut, ReorderOneUpsertedOut
 from .utils import PyObjectId  # type: ignore
 
 load_dotenv()
 
-# TODO: add on env and settings
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME")
 
@@ -37,11 +40,12 @@ class Sortings:
 
     def __init__(self, collection_name: str):
         """
-        collection_name: collection name of the elements to be sorted
+        Initializes the Sortings object so the client can manipulate custom ordered objects. Saves the custom ordered objetcs on a collection named `custom-sortings` on the same database as the collection to be sorted.
+        `collection_name`: collection name of the elements to be sorted
         """
         logger.debug(f"Initializing Sortings for {collection_name}")
         self.collection: str = collection_name
-        self.sortings = DB.get()["custom-sortings"]  # type: ignore
+        self.sortings = DB.get()["custom-sortings"]
         self.create_search_indexes()
 
     def reorder_one(
@@ -49,10 +53,16 @@ class Sortings:
     ) -> ReorderOneUpsertedOut | ReorderOneUpdatedOut:
         """
         Reorders a resource in the custom order.
-        creator: Creator object
-        resource_id: ObjectId of the resource to be ordered
-        position: int position to be set
+        `creator`: Creator object
+        `resource_id`: ObjectId of the resource to be ordered
+        `position`: int position to be set
         """
+
+        object_sorted = DB.get()[self.collection].find_one(
+            filter={"_id": resource_id, "created_by.user_email": creator.user_email}
+        )
+        if object_sorted is None:
+            raise ObjectToBeSortedNotFound
 
         filter = {
             "resource_ref": {"$ref": self.collection, "$id": resource_id},
@@ -74,7 +84,11 @@ class Sortings:
             },
         }
 
-        result = self.sortings.update_one(filter=filter, update=update, upsert=True)
+        result = self.sortings.update_one(
+            filter=filter,
+            update=update,
+            upsert=True,
+        )
 
         if result.upserted_id is not None:
             return ReorderOneUpsertedOut(
@@ -85,6 +99,8 @@ class Sortings:
             )
         elif result.modified_count == 1 or result.matched_count == 1:
             object = self.sortings.find_one(filter=filter)
+            if object is None:
+                raise CustomOrderNotSaved
             return ReorderOneUpdatedOut(
                 id=object["_id"],
                 updated_at=updated_at,
@@ -97,6 +113,20 @@ class Sortings:
         resources: list[ReorderManyResourcesIn],
         creator: Creator,
     ) -> pymongo.results.BulkWriteResult:
+        """
+        Reorders many resources in the custom order sent as body.
+        `resources`: resources to be reordered
+        `creator`: Creator object
+
+        Type of body to send as `resources`:
+        ```
+        [{
+            "resource_id": "resource.$id",
+            "resource_ref": "resource.$ref",
+            "position": 0,
+        }]
+        ```
+        """
         result = self.sortings.bulk_write(
             [
                 pymongo.UpdateOne(
@@ -125,6 +155,7 @@ class Sortings:
     def read_many(self, creator: Creator) -> list[CustomSorting]:
         """
         Returns the objects in the order they were sorted.
+        `creator`: Creator object
         """
 
         # TODO: change this Any to specific type
@@ -142,6 +173,7 @@ class Sortings:
     ) -> list[CustomSortingWithResource[T]]:
         """
         Returns the objects in the order they were sorted.
+        `creator`: Creator object
         """
         # TODO: change this Any to specific type
         custom_sortings: pymongo.command_cursor.CommandCursor[Any] = (
@@ -199,8 +231,9 @@ class Sortings:
         """
         Deletes a resource from the custom order according to the position.
 
-        position: int position to be deleted
-        background_task: BackgroundTasks object (comes from route dependency), send None to not update the other objects positions after deletion
+        `position`: int position to be deleted
+        `creator`: Creator object
+        `background_task`: BackgroundTasks object (comes from route dependency), send None to not update the other objects positions after deletion
         """
         user_email = creator.user_email
 
