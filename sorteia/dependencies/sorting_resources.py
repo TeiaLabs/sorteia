@@ -27,13 +27,21 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
             default="no", alias="X-Resolve-Refs"
         ),
         creator: Creator = Depends(privileges.is_valid_user),
-    ) -> list[CustomSorting | CustomSortingWithResource[T]]:
+    ) -> list[CustomSorting | CustomSortingWithResource[T]]:  # type: ignore
         """
-        resource: str resource name
+        Returns the custom order of a resource.
+
+        If header `X-Resolve-Refs` is set to `$resource_ref`, it will return the custom order with the whole object. If `no`, it will return only the custom order without the whole object.
+        `resource`: str resource name
+
+        `resource`: str resource name
+        `sort`: Literal["position"] sort by position
+        `resolve_refs`: Literal["$resource_ref", "no"] resolve references
+        `creator`: Creator object
         """
         if resolve_refs == "$resource_ref":
-            return Sortings(resource).read_many_whole_object(creator=creator)
-        return Sortings(resource).read_many(creator=creator)
+            return Sortings(resource).read_many_whole_object(creator=creator)  # type: ignore
+        return Sortings(resource).read_many(creator=creator)  # type: ignore
 
     @router.put("/{resource}/{position}", status_code=201)
     def reorder_one(  # type: ignore
@@ -43,7 +51,17 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         creator: Creator = Depends(privileges.is_valid_user),
     ) -> ReorderOneUpdatedOut | ReorderOneUpsertedOut:
         """
-        position: int position to be inserted
+        Reorders a resource in the custom order.
+
+        `resource`: str resource name
+        `position`: int position to be inserted
+        `body`: ReorderOneResourceIn resource_id to be inserted
+        `creator`: Creator object
+
+        Type of the ReorderOneResourceIn:
+        ```
+        {"resource_id": "pyobjectid"}
+        ```
         """
         return Sortings(resource).reorder_one(
             creator=creator, resource_id=body.resource_id, position=position
@@ -57,7 +75,11 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         background_task: BackgroundTasks,
     ) -> None:
         """
-        position: int position to be deleted
+        Deletes a resource from the custom order.
+
+        `resource`: str resource name
+        `position`: int position to be deleted
+        `creator`: Creator object
         """
         Sortings(resource).delete_one(position, creator, background_task)
 
@@ -68,7 +90,17 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         creator: Creator = Depends(privileges.is_valid_user),
     ) -> None:
         """
-        resource: str resource name
+        `resource`: str resource name
+        `body`: list[ReorderManyResourcesIn] resources to be reordered
+
+        Type of the ReorderManyResourcesIn:
+        ```
+        [{
+            "resource_id": "resource.$id",
+            "resource_ref": "resource.$ref",
+            "position": 0,
+        }]
+        ```
         """
         Sortings(resource).reorder_many(resources=body, creator=creator)
 
