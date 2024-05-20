@@ -1,18 +1,19 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
 from tauth.schemas import Creator  # type: ignore
 
 from sorteia.utils import PyObjectId
 
+T = TypeVar("T")
+
 
 class DBRef(BaseModel):
     collection: str = Field(alias="$ref")
     id: PyObjectId = Field(alias="$id")
-
-    # class Config:
-    #   populate_by_name = True
-    #   json_encoders = {PyObjectId: lambda oid: str(oid)}
 
 
 class CustomSorting(BaseModel):
@@ -22,11 +23,9 @@ class CustomSorting(BaseModel):
     created_by: Creator
     position: int
     resource_ref: DBRef
-    # id: Hash(created_by.user_email, resource_ref.$ref, position)
-    # indexes = [{"resource_ref.$ref": 1, "position": 1}]
 
 
-class CustomSortingWithResource[T](BaseModel):
+class CustomSortingWithResource(Generic[T], BaseModel):
     id: PyObjectId = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
