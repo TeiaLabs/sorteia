@@ -31,7 +31,7 @@ DB_NAME = os.getenv("DB_NAME")
 DB.add_conn(
     db_name=DB_NAME,
     uri=MONGO_URI,
-    alias="default",
+    # alias="default",
     start_client=True,
 )
 
@@ -58,6 +58,7 @@ class Sortings:
         `position`: int position to be set
         """
 
+        # check if user is owner of that resource to reorder it
         object_sorted = DB.get()[self.collection].find_one(
             filter={"_id": resource_id, "created_by.user_email": creator.user_email}
         )
