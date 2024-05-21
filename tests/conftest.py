@@ -27,7 +27,7 @@ load_dotenv()
 def mongo_connection() -> Database[Any]:
     logger.debug("Trying to connect to MongoDB")
     client: MongoClient[Any] = MongoClient(os.getenv("MONGO_URI"))
-    db: Database[Any] = client["sorteia-test"]
+    db: Database[Any] = client["athena"]
     logger.debug("Connected to MongoDB")
     return db
 
