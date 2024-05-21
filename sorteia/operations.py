@@ -36,10 +36,37 @@ DB.add_conn(
 
 
 class Sortings:
+    """
+    Operations to manipulate custom ordered objects.
+    Allows arbitrary sorting instead of attribute-based sorting.
+
+    Works based on the following assumptions:
+    - 1 document per user per resource.
+    - Allow multiple users to sort the same documents differently.
+    - Allow for a large number of items to be sorted.
+
+    Model saved on the database:
+    ```python
+    class CustomSorting(BaseModel):
+        id: PyObjectId = Field(alias="_id")
+        created_at: datetime
+        updated_at: datetime
+        created_by: Creator
+        position: int
+        resource_collection: str
+        resource_id: PyObjectId
+    ```
+
+    After a read many +sorted +join, the client should run a GET /{resource}
+    and either: set.subtract() the IDs he already has; or pass in the unwanted
+    IDs to a {_id: {$nin [ids]}}; or allow with the duplicate items.
+    """
 
     def __init__(self, collection_name: str):
         """
-        Initializes the Sortings object so the client can manipulate custom ordered objects. Saves the custom ordered objetcs on a collection named `custom-sortings` on the same database as the collection to be sorted.
+        Initializes the Sortings object so the client can manipulate custom
+        ordered objects. Saves the custom ordered objetcs on a collection
+        named `custom-sortings` on the same database as the collection to be sorted.
         `collection_name`: collection name of the elements to be sorted
         """
         logger.debug(f"Initializing Sortings for {collection_name}")
@@ -55,6 +82,12 @@ class Sortings:
         `creator`: Creator object
         `resource_id`: ObjectId of the resource to be ordered
         `position`: int position to be set
+
+        Raises `ObjectToBeSortedNotFound` if the object to be sorted does not
+        exist on the targeted collection.
+
+        Raises `CustomOrderNotSaved` if the custom order could not be saved - maybe
+        because of an internal error.
         """
 
         # check if user is owner of that resource to reorder it
@@ -127,6 +160,9 @@ class Sortings:
             "resource_ref": "resource.$ref",
             "position": 0,
         }]
+
+        WARNING: sent `ids` are not checked if they exist on the collection to be sorted because of the many different searches on the database necessary.
+        Make sure to check it before sending the request.
         ```
         """
         result = self.sortings.bulk_write(
@@ -216,6 +252,8 @@ class Sortings:
         `position`: int position to be deleted
         `creator`: Creator object
         `background_task`: BackgroundTasks object (comes from route dependency), send None to not update the other objects positions after deletion
+
+        Raises `CustomOrderNotFound` if the custom order could not be found to be deleted.
         """
         user_email = creator.user_email
 
