@@ -74,7 +74,7 @@ def test_reorder_many(
 
     first = mongo_connection["custom-sortings"].find_one(
         filter={
-            "resource_collection": "custom-sortings",
+            "resource_collection": "things-test",
             "resource_id": populate_db[1].id,
             "position": 1,
         }
@@ -82,9 +82,9 @@ def test_reorder_many(
     assert first
     third = mongo_connection["custom-sortings"].find_one(
         filter={
-            "resource_collection": "custom-sortings",
+            "resource_collection": "things-test",
             "resource_id": populate_db[3].id,
-            "position": 1,
+            "position": 3,
         }
     )
     assert third
@@ -146,8 +146,6 @@ def test_read_many_wholeobject(
         sorting_instance.read_many_whole_object(creator=creators_instances[0])
     )
     assert len(result) == 3
-
-    logger.debug(result[0])
 
     assert result[0]["resource"]["name"] == populate_db[1].name  # type: ignore
     assert result[1]["resource"]["name"] == populate_db[0].name  # type: ignore

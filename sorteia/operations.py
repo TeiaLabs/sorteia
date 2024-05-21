@@ -31,7 +31,6 @@ DB_NAME = os.getenv("DB_NAME")
 DB.add_conn(
     db_name=DB_NAME,
     uri=MONGO_URI,
-    # alias="default",
     start_client=True,
 )
 
@@ -194,6 +193,12 @@ class Sortings:
                             "localField": "resource_id",
                             "foreignField": "_id",
                             "as": "resource",
+                        }
+                    },
+                    {
+                        "$unwind": {
+                            "path": "$resource",
+                            "preserveNullAndEmptyArrays": True,
                         }
                     },
                     {"$sort": {"position": pymongo.ASCENDING}},
