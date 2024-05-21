@@ -1,9 +1,10 @@
 from typing import Any
 
-from loguru import logger
 from pymongo.database import Database
+from pytest import raises
 from tauth.schemas import Creator  # type: ignore
 
+from sorteia.exceptions import CustomOrderNotFound, ObjectToBeSortedNotFound
 from sorteia.models import CustomSortingWithResource
 from sorteia.operations import Sortings
 from sorteia.schemas import (
@@ -11,6 +12,7 @@ from sorteia.schemas import (
     ReorderOneUpdatedOut,
     ReorderOneUpsertedOut,
 )
+from sorteia.utils import PyObjectId
 
 from .conftest import Thing
 
@@ -90,22 +92,16 @@ def test_reorder_many(
     assert third
 
 
-def test_reorder_many_with_invalid_ids(
-    sorting_instance: Sortings,
-    creators_instances: list[Creator],
-    populate_db: list[Thing],
-    mongo_connection: Database[Any],
-):
-    pass
-
-
 def test_reorder_one_with_invalid_id(
     sorting_instance: Sortings,
     creators_instances: list[Creator],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
-    pass
+    with raises(ObjectToBeSortedNotFound):
+        sorting_instance.reorder_one(
+            creator=creators_instances[0], resource_id=PyObjectId(), position=3
+        )
 
 
 def test_read_many_ordered(
@@ -158,7 +154,19 @@ def test_delete_custom_order(
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
-    pass
+    result = sorting_instance.delete_one(
+        position=2, creator=creators_instances[0], background_task=None
+    )
+
+    assert result
+
+    custom_order = mongo_connection["custom-sortings"].find_one(
+        filter={"resource_id": populate_db[1].id, "position": 2}
+    )
+    assert custom_order is None
+
+    rest = sorting_instance.read_many(creator=creators_instances[0])
+    assert len(rest) == 2
 
 
 def test_delete_nonexistant_custom_order(
@@ -166,5 +174,17 @@ def test_delete_nonexistant_custom_order(
     creators_instances: list[Creator],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
-):  # invalid position
+):
+    with raises(CustomOrderNotFound):
+        sorting_instance.delete_one(
+            position=100, creator=creators_instances[0], background_task=None
+        )
+
+
+def test_delete_one_with_background_task(
+    sorting_instance: Sortings,
+    creators_instances: list[Creator],
+    populate_db: list[Thing],
+    mongo_connection: Database[Any],
+):  # still need to figure out how to mock the background task
     pass
