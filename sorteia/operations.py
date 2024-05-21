@@ -66,7 +66,8 @@ class Sortings:
             raise ObjectToBeSortedNotFound
 
         filter = {
-            "resource_ref": {"$ref": self.collection, "$id": resource_id},
+            "resource_collection": self.collection,
+            "resource_id": resource_id,
             "created_by.user_email": creator.user_email,
         }
 
@@ -74,7 +75,8 @@ class Sortings:
         created_at = datetime.now()
         custom_sorting = {
             "position": position,
-            "resource_ref": {"$ref": self.collection, "$id": resource_id},
+            "resource_collection": self.collection,
+            "resource_id": resource_id,
             "updated_at": updated_at,
         }
         update = {
@@ -132,8 +134,8 @@ class Sortings:
             [
                 pymongo.UpdateOne(
                     filter={
-                        "resource_ref.$ref": resource.resource_ref,
-                        "resource_ref.$id": resource.resource_id,
+                        "resource_collection": self.collection,
+                        "resource_id": resource.resource_id,
                         "created_by.user_email": creator.user_email,
                     },
                     update={
@@ -162,7 +164,7 @@ class Sortings:
         # TODO: change this Any to specific type
         custom_sortings: pymongo.cursor.Cursor[Any] = self.sortings.find(
             filter={
-                "resource_ref.$ref": self.collection,
+                "resource_collection": self.collection,
                 "created_by.user_email": creator.user_email,
             }
         ).sort("position", pymongo.ASCENDING)
@@ -179,48 +181,22 @@ class Sortings:
         # TODO: change this Any to specific type
         custom_sortings: pymongo.command_cursor.CommandCursor[Any] = (
             self.sortings.aggregate(
-                # [
-                #     {
-                #         "$match": {
-                #             "resource_ref.$ref": self.collection,
-                #             "created_by.user_email": creator.user_email,
-                #         }
-                #     },
-                #     # {
-                #     #     "$lookup": {
-                #     #         "from": self.collection,
-                #     #         "localField": "resource_ref.$id",
-                #     #         "foreignField": "_id",
-                #     #         "as": "resource",
-                #     #     }
-                #     # },
-                #     {"$sort": {"position": pymongo.ASCENDING}},
-                # ]
                 [
                     {
-                        "$addFields": {
-                            "resource_ref": {
-                                "$arrayElemAt": [
-                                    {"$objectToArray": "resource_ref"},
-                                    1,
-                                ]  # expected document, not string
-                            }
+                        "$match": {
+                            "resource_collection": self.collection,
+                            "created_by.user_email": creator.user_email,
                         }
                     },
-                    {"$addFields": {"resource_ref": "resource_ref.v"}},
                     {
                         "$lookup": {
                             "from": self.collection,
-                            "localField": "resource_ref",
+                            "localField": "resource_id",
                             "foreignField": "_id",
                             "as": "resource",
                         }
                     },
-                    {
-                        "$addFields": {
-                            "resource_ref": {"$arrayElemAt": ["$resource_ref", 0]}
-                        }
-                    },
+                    {"$sort": {"position": pymongo.ASCENDING}},
                 ]
             )
         )
@@ -249,7 +225,7 @@ class Sortings:
                 self.sortings.update_many,
                 filter={
                     "position": {"$gt": position},
-                    "resource_ref": {"$ref"},
+                    "resource_collection": self.collection,
                     "created_by.user_email": user_email,
                 },
                 update={"$inc": {"position": -1}},
@@ -261,5 +237,5 @@ class Sortings:
         Creates the indexes needed for the custom sortings.
         """
         logger.debug("Creating indexes for custom sortings")
-        self.sortings.create_index([("resource.$ref", pymongo.ASCENDING)])
+        self.sortings.create_index([("resource_collection", pymongo.ASCENDING)])
         self.sortings.create_index([("position", pymongo.ASCENDING)])
