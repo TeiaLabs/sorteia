@@ -1,16 +1,17 @@
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 import pymongo
 import pymongo.command_cursor
 import pymongo.cursor
 import pymongo.results
 from annotated_types import T
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from fastapi import BackgroundTasks
 from loguru import logger
 from redbaby.database import DB  # type: ignore
+from rich import print
 from tauth.schemas import Creator  # type: ignore
 
 from .exceptions import (
@@ -22,7 +23,7 @@ from .models import CustomSorting, CustomSortingWithResource
 from .schemas import ReorderManyResourcesIn, ReorderOneUpdatedOut, ReorderOneUpsertedOut
 from .utils import PyObjectId  # type: ignore
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME")
@@ -31,6 +32,7 @@ DB_NAME = os.getenv("DB_NAME")
 DB.add_conn(
     db_name=DB_NAME,
     uri=MONGO_URI,
+    alias="default",
     start_client=True,
 )
 
@@ -62,17 +64,28 @@ class Sortings:
     IDs to a {_id: {$nin [ids]}}; or allow with the duplicate items.
     """
 
-    def __init__(self, collection_name: str):
+    def __init__(
+        self,
+        collection_name: str,
+        alias: str = "default",
+        db_name: str = DB_NAME,
+    ):
         """
         Initializes the Sortings object so the client can manipulate custom
         ordered objects. Saves the custom ordered objetcs on a collection
         named `custom-sortings` on the same database as the collection to be sorted.
         `collection_name`: collection name of the elements to be sorted
+        `alias`: alias of the database connection, default is `default`
+        `db_name`: name of the database, if not, it will get from env variables (`DB_NAME`)
         """
+
         logger.debug(f"Initializing Sortings for {collection_name}")
         self.collection: str = collection_name
-        self.sortings = DB.get()["custom-sortings"]
-        self.create_search_indexes()
+        self.database = DB.get(alias=alias, db_name=db_name)
+        self.sortings = self.database["custom-sortings"]
+        logger.debug(
+            f"Object sortings created for {collection_name} - {self.database.name}"
+        )
 
     def reorder_one(
         self, creator: Creator, resource_id: PyObjectId, position: int
@@ -91,7 +104,10 @@ class Sortings:
         """
 
         # check if user is owner of that resource to reorder it
-        object_sorted = DB.get()[self.collection].find_one(
+        logger.debug(
+            f"Searching for object to be sorted on {self.collection} on {DB.get().name}"
+        )
+        object_sorted = self.database[self.collection].find_one(
             filter={"_id": resource_id, "created_by.user_email": creator.user_email}
         )
         if object_sorted is None:
@@ -195,7 +211,6 @@ class Sortings:
         Returns the objects in the order they were sorted.
         `creator`: Creator object
         """
-
         # TODO: change this Any to specific type
         custom_sortings: pymongo.cursor.Cursor[Any] = self.sortings.find(
             filter={
@@ -237,6 +252,11 @@ class Sortings:
                             "preserveNullAndEmptyArrays": True,
                         }
                     },
+                    {
+                        "$project": {
+                            "resource._id": 0,
+                        }
+                    },
                     {"$sort": {"position": pymongo.ASCENDING}},
                 ]
             )
@@ -275,10 +295,13 @@ class Sortings:
             )
         return result
 
-    def create_search_indexes(self) -> None:
+    @classmethod
+    def create_search_indexes(cls, mongo_uri: str, db_name: str) -> None:
         """
         Creates the indexes needed for the custom sortings.
         """
         logger.debug("Creating indexes for custom sortings")
-        self.sortings.create_index([("resource_collection", pymongo.ASCENDING)])
-        self.sortings.create_index([("position", pymongo.ASCENDING)])
+        client = pymongo.MongoClient(mongo_uri)
+        db = client[db_name]
+        db["custom-sortings"].create_index([("resource_collection", pymongo.ASCENDING)])
+        db["custom-sortings"].create_index([("position", pymongo.ASCENDING)])
