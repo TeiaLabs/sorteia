@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import pymongo
 import pymongo.command_cursor
@@ -11,7 +11,6 @@ from dotenv import load_dotenv, find_dotenv
 from fastapi import BackgroundTasks
 from loguru import logger
 from redbaby.database import DB  # type: ignore
-from rich import print
 from tauth.schemas import Creator  # type: ignore
 
 from .exceptions import (
