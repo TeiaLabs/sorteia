@@ -5,9 +5,9 @@ from pytest import raises
 from tauth.schemas import Creator  # type: ignore
 
 from sorteia.exceptions import CustomOrderNotFound, ObjectToBeSortedNotFound
-from sorteia.models import CustomSortingWithResource
 from sorteia.operations import Sortings
 from sorteia.schemas import (
+    CustomSortingWithResource,
     ReorderManyResourcesIn,
     ReorderOneUpdatedOut,
     ReorderOneUpsertedOut,
