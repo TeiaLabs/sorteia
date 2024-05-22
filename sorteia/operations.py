@@ -299,6 +299,13 @@ class Sortings:
             )
         return result
 
+    def read_all_sorted_objects(
+        self, creator: Creator, filters: dict[str, Any]
+    ) -> list[Any]:
+        unordered_objects = self.database[self.collection].find(filter=filters)
+        sorted_objects = self.read_many(creator)
+        return []
+
     @classmethod
     def create_search_indexes(cls, mongo_uri: str, db_name: str) -> None:
         """
