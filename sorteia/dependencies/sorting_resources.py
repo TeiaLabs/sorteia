@@ -20,10 +20,11 @@ from sorteia.exceptions import (
     CustomOrderNotSaved,
     ObjectToBeSortedNotFound,
 )
-from sorteia.models import CustomSorting, CustomSortingWithResource
+from sorteia.models import CustomSorting
 
 from ..operations import Sortings
 from ..schemas import (
+    CustomSortingWithResource,
     ReorderManyResourcesIn,
     ReorderOneResourceIn,
     ReorderOneUpdatedOut,
@@ -87,14 +88,18 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
                 creator=creator, resource_id=body.resource_id, position=position
             )
         except ObjectToBeSortedNotFound:
+            logger.error(
+                "Object the user is trying to reorder was not found on the same database the order is going to be saved."
+            )
             raise HTTPException(
                 status_code=404,
-                detail="Object to be sorted not found - ObjectToBeSortedNotFound",
+                detail="Object to be sorted not found",
             )
         except CustomOrderNotSaved:
+            logger.error("Custom order could not be saved.")
             raise HTTPException(
                 status_code=400,
-                detail="Custom order not saved - maybe because of an internal error - CustomOrderNotSaved",
+                detail="Custom order not saved - maybe because of an internal error.",
             )
 
     @router.delete("/{resource}/{position}", status_code=204)
@@ -117,9 +122,8 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
                 position, creator, background_task
             )
         except CustomOrderNotFound:
-            raise HTTPException(
-                status_code=404, detail="Custom order not found - CustomOrderNotFound"
-            )
+            logger.error("Custom sorting to be deleted was not found.")
+            raise HTTPException(status_code=404, detail="Custom order not found.")
 
     @router.put("/{resource}", status_code=204)
     def reorder_many(  # type: ignore

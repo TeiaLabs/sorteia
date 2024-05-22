@@ -7,7 +7,7 @@ import pymongo.command_cursor
 import pymongo.cursor
 import pymongo.results
 from annotated_types import T
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 from fastapi import BackgroundTasks
 from loguru import logger
 from redbaby.database import DB  # type: ignore
@@ -18,8 +18,13 @@ from .exceptions import (
     CustomOrderNotSaved,
     ObjectToBeSortedNotFound,
 )
-from .models import CustomSorting, CustomSortingWithResource
-from .schemas import ReorderManyResourcesIn, ReorderOneUpdatedOut, ReorderOneUpsertedOut
+from .models import CustomSorting
+from .schemas import (
+    CustomSortingWithResource,
+    ReorderManyResourcesIn,
+    ReorderOneUpdatedOut,
+    ReorderOneUpsertedOut,
+)
 from .utils import PyObjectId  # type: ignore
 
 load_dotenv(find_dotenv())

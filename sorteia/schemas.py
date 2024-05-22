@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from tauth.schemas import Creator  # type: ignore
 
 from sorteia.utils import PyObjectId
+
+T = TypeVar("T")
 
 
 class ReorderManyResourcesIn(BaseModel):
@@ -47,3 +50,13 @@ class ReorderOneUpsertedOut(BaseModel):
 class ReorderOneUpdatedOut(BaseModel):
     id: PyObjectId
     updated_at: datetime
+
+
+class CustomSortingWithResource(BaseModel, Generic[T]):
+    id: PyObjectId = Field(alias="_id")
+    created_at: datetime
+    updated_at: datetime
+    created_by: Creator
+    position: int
+    resource_id: PyObjectId
+    resource: T  # actual resource
