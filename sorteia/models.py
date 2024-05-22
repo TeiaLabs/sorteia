@@ -21,10 +21,11 @@ class CustomSorting(BaseModel):
     resource_id: PyObjectId
 
 
-class CustomSortingWithResource(Generic[T], BaseModel):
+class CustomSortingWithResource(BaseModel, Generic[T]):
     id: PyObjectId = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
     created_by: Creator
     position: int
+    resource_id: PyObjectId
     resource: T  # actual resource
