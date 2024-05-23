@@ -11,13 +11,13 @@ from dotenv import find_dotenv, load_dotenv
 from fastapi import BackgroundTasks
 from loguru import logger
 from redbaby.database import DB  # type: ignore
-from redbaby.behaviors import ReadingMixin  # type: ignore
 from tauth.schemas import Creator  # type: ignore
 
 from .exceptions import (
     CustomOrderNotFound,
     CustomOrderNotSaved,
     ObjectToBeSortedNotFound,
+    PositionOutOfBounds,
 )
 from .models import CustomSorting
 from .schemas import (
@@ -41,7 +41,7 @@ DB.add_conn(
     start_client=True,
 )
 
-T = TypeVar("T", bound=ReadingMixin)
+T = TypeVar("T")
 
 
 class Sortings:
@@ -109,6 +109,8 @@ class Sortings:
 
         Raises `CustomOrderNotSaved` if the custom order could not be saved - maybe
         because of an internal error.
+
+        Raises `PostionOutOfBounds` if the position is out of bounds.
         """
 
         # check if user is owner of that resource to reorder it
@@ -116,10 +118,27 @@ class Sortings:
             f"Searching for object to be sorted on {self.collection} on {DB.get().name}"
         )
         object_sorted = self.database[self.collection].find_one(
-            filter={"_id": resource_id, "created_by.user_email": creator.user_email}
+            filter={
+                "_id": resource_id,
+                "created_by.user_email": creator.user_email,
+            }
         )
         if object_sorted is None:
             raise ObjectToBeSortedNotFound
+
+        max_position: int = self.database[self.collection].count_documents(
+            filter={
+                "created_by.user_email": creator.user_email,
+            }
+        )
+        if position > max_position:
+            raise PositionOutOfBounds(
+                message=f"Position out of bounds: {position} cannot be bigger than {max_position}",
+                detail={
+                    "max_position": max_position,
+                    "position": position,
+                },
+            )
 
         filter = {
             "resource_collection": self.collection,
@@ -189,6 +208,21 @@ class Sortings:
         Make sure to check it before sending the request.
         ```
         """
+        max_position: int = self.database[self.collection].count_documents(
+            filter={
+                "created_by.user_email": creator.user_email,
+            }
+        )
+        for resource in resources:
+            if resource.position > max_position:
+                raise PositionOutOfBounds(
+                    message=f"Position out of bounds - position cannot be higher than the total amount of elements to be sorted.",
+                    detail={
+                        "max_position": max_position,
+                        "position": resource.position,
+                    },
+                )
+
         result = self.sortings.bulk_write(
             [
                 pymongo.UpdateOne(

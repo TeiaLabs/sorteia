@@ -19,6 +19,7 @@ from sorteia.exceptions import (
     CustomOrderNotFound,
     CustomOrderNotSaved,
     ObjectToBeSortedNotFound,
+    PositionOutOfBounds,
 )
 from sorteia.models import CustomSorting
 
@@ -101,6 +102,12 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
                 status_code=400,
                 detail="Custom order not saved - maybe because of an internal error.",
             )
+        except PositionOutOfBounds as e:
+            logger.error("Position is out of bounds.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"{e.message} - {e.detail}",
+            )
 
     @router.delete("/{resource}/{position}", status_code=204)
     def delete_sorting(  # type: ignore
@@ -145,8 +152,15 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         ```
         """
         org = creator.user_email.split("@")[1].split(".")[0]
-        Sortings(collection_name=resource, alias=org, db_name=org).reorder_many(
-            resources=body, creator=creator
-        )
+        try:
+            Sortings(collection_name=resource, alias=org, db_name=org).reorder_many(
+                resources=body, creator=creator
+            )
+        except PositionOutOfBounds as e:
+            logger.error("Position is out of bounds.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"{e.message} - {e.detail}",
+            )
 
     app.include_router(router)
