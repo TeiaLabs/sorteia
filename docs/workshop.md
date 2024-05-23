@@ -93,11 +93,19 @@ Out: `list[CustomSortingWithResource[T]]`
 Delete a resource from the custom order according to the position. 
 Out: `DeleteResult`
 
+### read_all_ordered_objects
+Reads the objects in order - reads the objecs that do not have the custom order and the ones who has it.
+Out: `list[model]`
+ 
+## Exceptions
+CustomOrderNotSaved - reorders
+ObjectToBeSortedNotFound - reorders
+PositionOutOfBounds - reorders
+
+CustomOrderNotFound - delete
 
 ## Routes dependencies
 First of all, call `create_search_indexes` passing as arguments `mongo_uri` and `db_name` to create the indexes on the correct database.
-
-
 
 
 ## Examples of use
@@ -114,5 +122,5 @@ Sortings.create_search_indexes(
 router = APIRouter(prefix="/api")
 sorting_resources.add_sorting_resources_dependency(app)
 
-
+# check athena v2 docs - canvases
 ```
