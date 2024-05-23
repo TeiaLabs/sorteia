@@ -341,23 +341,33 @@ class Sortings:
         self, creator: Creator, model: Type[T], **filters
     ) -> list[T]:
         query: dict[str, Any] = {k: v for k, v in filters.items() if v is not None}
-        org = creator.user_email.split("@")[1].split(".")[0]
 
-        unordered_objs: list[model] = model.find(
-            filter=query, alias=org, validate=True, lazy=False
+        unordered_objs: pymongo.cursor.Cursor[Any] = self.database[
+            self.collection
+        ].find(query)
+        unordered_objs_list = list(unordered_objs)
+        logger.debug(
+            f"Found {len(unordered_objs_list)} objects in the original collection"
         )
+
         sorted_objs: list[CustomSortingWithResource[model]] = (
             self.read_many_whole_object(creator)
         )
+        logger.debug(f"Found {len(sorted_objs)} objects of these already sorted")
 
-        custom_sortings_set: Set[PyObjectId] = {obj.resource_id for obj in sorted_objs}
+        custom_sortings_set: Set[PyObjectId] = {
+            obj["resource_id"] for obj in sorted_objs
+        }
         filtered_objs: list[model] = [
-            obj for obj in unordered_objs if obj.id not in custom_sortings_set
+            obj for obj in unordered_objs_list if obj["_id"] not in custom_sortings_set
         ]
+        logger.debug(
+            f"There are now {len(filtered_objs)} objects that are not repeated ids"
+        )
 
         for sorting in sorted_objs:
-            obj = model(**sorting.resource.model_dump(), id=sorting.resource_id)  # type: ignore
-            filtered_objs.insert(sorting.position, obj)
+            obj = model(**sorting["resource"], _id=sorting["resource_id"])  # type: ignore
+            filtered_objs.insert(sorting["position"], obj)
 
         return filtered_objs
 
