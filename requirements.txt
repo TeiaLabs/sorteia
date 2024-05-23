@@ -5,3 +5,4 @@ loguru
 pydantic==2.7.1
 redbaby 
 tauth @ git+ssh://git@github.com/TeiaLabs/tauth.git@redblessness
+redbaby 

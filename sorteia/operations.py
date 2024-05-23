@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Set, Type, TypeVar
 
 import pymongo
 import pymongo.command_cursor
@@ -11,6 +11,7 @@ from dotenv import find_dotenv, load_dotenv
 from fastapi import BackgroundTasks
 from loguru import logger
 from redbaby.database import DB  # type: ignore
+from redbaby.behaviors import ReadingMixin  # type: ignore
 from tauth.schemas import Creator  # type: ignore
 
 from .exceptions import (
@@ -40,11 +41,14 @@ DB.add_conn(
     start_client=True,
 )
 
+T = TypeVar("T", bound=ReadingMixin)
+
 
 class Sortings:
     """
     Operations to manipulate custom ordered objects.
     Allows arbitrary sorting instead of attribute-based sorting.
+    First position = 0, second position = 1, and so on.
 
     Works based on the following assumptions:
     - 1 document per user per resource.
@@ -299,12 +303,29 @@ class Sortings:
             )
         return result
 
-    def read_all_sorted_objects(
-        self, creator: Creator, filters: dict[str, Any]
-    ) -> list[Any]:
-        unordered_objects = self.database[self.collection].find(filter=filters)
-        sorted_objects = self.read_many(creator)
-        return []
+    def read_all_ordered_objects(
+        self, creator: Creator, model: Type[T], **filters
+    ) -> list[T]:
+        query: dict[str, Any] = {k: v for k, v in filters.items() if v is not None}
+        org = creator.user_email.split("@")[1].split(".")[0]
+
+        unordered_objs: list[model] = model.find(
+            filter=query, alias=org, validate=True, lazy=False
+        )
+        sorted_objs: list[CustomSortingWithResource[model]] = (
+            self.read_many_whole_object(creator)
+        )
+
+        custom_sortings_set: Set[PyObjectId] = {obj.resource_id for obj in sorted_objs}
+        filtered_objs: list[model] = [
+            obj for obj in unordered_objs if obj.id not in custom_sortings_set
+        ]
+
+        for sorting in sorted_objs:
+            obj = model(**sorting.resource.model_dump(), id=sorting.resource_id)  # type: ignore
+            filtered_objs.insert(sorting.position, obj)
+
+        return filtered_objs
 
     @classmethod
     def create_search_indexes(cls, mongo_uri: str, db_name: str) -> None:
