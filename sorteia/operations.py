@@ -96,7 +96,11 @@ class Sortings:
         )
 
     def reorder_one(
-        self, creator: Creator, resource_id: PyObjectId, position: int
+        self,
+        creator: Creator,
+        resource_id: PyObjectId,
+        position: int,
+        background_task: BackgroundTasks | None,
     ) -> ReorderOneUpsertedOut | ReorderOneUpdatedOut:
         """
         Reorders a resource in the custom order.
@@ -185,6 +189,18 @@ class Sortings:
             )
         else:
             raise CustomOrderNotSaved
+
+        if background_task:
+            background_task.add_task(
+                self.sortings.update_many,
+                filter={
+                    "position": {"$gt": position},
+                    "resource_collection": self.collection,
+                    "created_by.user_email": creator.user_email,
+                },
+                update={"$inc": {"position": 1}},
+            )
+        return result
 
     def reorder_many(
         self,

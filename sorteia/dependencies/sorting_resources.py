@@ -86,7 +86,10 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
             return Sortings(
                 collection_name=resource, alias=org, db_name=org
             ).reorder_one(
-                creator=creator, resource_id=body.resource_id, position=position
+                creator=creator,
+                resource_id=body.resource_id,
+                position=position,
+                background_task=background_task,
             )
         except ObjectToBeSortedNotFound:
             logger.error(
