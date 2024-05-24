@@ -131,7 +131,7 @@ class Sortings:
                 "created_by.user_email": creator.user_email,
             }
         )
-        if position > max_position:
+        if position > max_position or position < 0:
             raise PositionOutOfBounds(
                 message=f"Position out of bounds: {position} cannot be bigger than {max_position}",
                 detail={
@@ -214,7 +214,7 @@ class Sortings:
             }
         )
         for resource in resources:
-            if resource.position > max_position:
+            if resource.position > max_position or resource.position < 0:
                 raise PositionOutOfBounds(
                     message=f"Position out of bounds - position cannot be higher than the total amount of elements to be sorted.",
                     detail={
@@ -340,6 +340,14 @@ class Sortings:
     def read_all_ordered_objects(
         self, creator: Creator, model: Type[T], **filters
     ) -> list[T]:
+        """
+        Reads all objects from the collection sorted by the custom order - includes
+        the ones that don't have the custom order set yet and the ones that already have.
+
+        `creator`: Creator object
+        `model`: Pydantic model to be used to create the objects
+        `filters`: filters to be applied to the find query on the `model` collection
+        """
         query: dict[str, Any] = {k: v for k, v in filters.items() if v is not None}
 
         unordered_objs: pymongo.cursor.Cursor[Any] = self.database[

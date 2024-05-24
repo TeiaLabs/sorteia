@@ -1,4 +1,9 @@
 # Sorteia
+Goal: allow arbitrary sorting instead of attribute-based sorting.
+
+- 1 document per user per resource.
+  - Allow multiple users to sort the same documents differently.
+  - Allow for a large number of items to be sorted.
 
 ## Models
 ```python
@@ -98,11 +103,12 @@ Reads the objects in order - reads the objecs that do not have the custom order 
 Out: `list[model]`
  
 ## Exceptions
-CustomOrderNotSaved - reorders
-ObjectToBeSortedNotFound - reorders
-PositionOutOfBounds - reorders
-
-CustomOrderNotFound - delete
+#### Reorders
+- CustomOrderNotSaved
+- ObjectToBeSortedNotFound
+- PositionOutOfBounds 
+#### Delete
+- CustomOrderNotFound
 
 ## Routes dependencies
 First of all, call `create_search_indexes` passing as arguments `mongo_uri` and `db_name` to create the indexes on the correct database.

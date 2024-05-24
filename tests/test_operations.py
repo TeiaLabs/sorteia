@@ -4,7 +4,11 @@ from pymongo.database import Database
 from pytest import raises
 from tauth.schemas import Creator  # type: ignore
 
-from sorteia.exceptions import CustomOrderNotFound, ObjectToBeSortedNotFound
+from sorteia.exceptions import (
+    CustomOrderNotFound,
+    ObjectToBeSortedNotFound,
+    PositionOutOfBounds,
+)
 from sorteia.operations import Sortings
 from sorteia.schemas import (
     CustomSortingWithResource,
@@ -24,13 +28,13 @@ def test_reorder_one_upsert(
     mongo_connection: Database[Any],
 ):
     result = sorting_instance.reorder_one(
-        creator=creators_instances[0], resource_id=populate_db[0].id, position=3
+        creator=creators_instances[0], resource_id=populate_db[0].id, position=2
     )
     assert isinstance(result, ReorderOneUpsertedOut)
     assert result.id
 
     custom_order = mongo_connection["custom-sortings"].find_one(
-        filter={"resource_id": populate_db[0].id, "position": 3}
+        filter={"resource_id": populate_db[0].id, "position": 2}
     )
     assert custom_order
 
@@ -44,15 +48,73 @@ def test_reorder_one_update(
     result = sorting_instance.reorder_one(
         creator=creators_instances[0],
         resource_id=populate_db[0].id,
-        position=2,
+        position=1,
     )
     assert isinstance(result, ReorderOneUpdatedOut)
     assert result.id
 
     custom_order = mongo_connection["custom-sortings"].find_one(
-        filter={"resource_id": populate_db[0].id, "position": 2}
+        filter={"resource_id": populate_db[0].id, "position": 1}
     )
     assert custom_order
+
+
+def test_reorder_one_invalid_position(
+    sorting_instance: Sortings,
+    creators_instances: list[Creator],
+    populate_db: list[Thing],
+    mongo_connection: Database[Any],
+):
+    with raises(PositionOutOfBounds):
+        sorting_instance.reorder_one(
+            creator=creators_instances[0], resource_id=populate_db[0].id, position=100
+        )
+
+    with raises(PositionOutOfBounds):
+        sorting_instance.reorder_one(
+            creator=creators_instances[0], resource_id=populate_db[0].id, position=-1
+        )
+
+
+def test_reorder_many_invalid_positions(
+    sorting_instance: Sortings,
+    creators_instances: list[Creator],
+    populate_db: list[Thing],
+    mongo_connection: Database[Any],
+):
+    with raises(PositionOutOfBounds):
+        sorting_instance.reorder_many(
+            resources=[
+                ReorderManyResourcesIn(
+                    resource_id=populate_db[0].id,
+                    resource_ref="things-test",
+                    position=1,
+                ),
+                ReorderManyResourcesIn(
+                    resource_id=populate_db[0].id,
+                    resource_ref="things-test",
+                    position=100,
+                ),
+            ],
+            creator=creators_instances[0],
+        )
+
+    with raises(PositionOutOfBounds):
+        sorting_instance.reorder_many(
+            resources=[
+                ReorderManyResourcesIn(
+                    resource_id=populate_db[0].id,
+                    resource_ref="things-test",
+                    position=1,
+                ),
+                ReorderManyResourcesIn(
+                    resource_id=populate_db[0].id,
+                    resource_ref="things-test",
+                    position=-1,
+                ),
+            ],
+            creator=creators_instances[0],
+        )
 
 
 def test_reorder_many(
@@ -63,10 +125,10 @@ def test_reorder_many(
 ):
     body = [
         ReorderManyResourcesIn(
-            resource_id=populate_db[1].id, resource_ref="things-test", position=1
+            resource_id=populate_db[1].id, resource_ref="things-test", position=0
         ),
         ReorderManyResourcesIn(
-            resource_id=populate_db[3].id, resource_ref="things-test", position=3
+            resource_id=populate_db[3].id, resource_ref="things-test", position=2
         ),
     ]
     result = sorting_instance.reorder_many(
@@ -78,7 +140,7 @@ def test_reorder_many(
         filter={
             "resource_collection": "things-test",
             "resource_id": populate_db[1].id,
-            "position": 1,
+            "position": 0,
         }
     )
     assert first
@@ -86,7 +148,7 @@ def test_reorder_many(
         filter={
             "resource_collection": "things-test",
             "resource_id": populate_db[3].id,
-            "position": 3,
+            "position": 2,
         }
     )
     assert third
@@ -100,7 +162,7 @@ def test_reorder_one_with_invalid_id(
 ):
     with raises(ObjectToBeSortedNotFound):
         sorting_instance.reorder_one(
-            creator=creators_instances[0], resource_id=PyObjectId(), position=3
+            creator=creators_instances[0], resource_id=PyObjectId(), position=2
         )
 
 
@@ -161,7 +223,7 @@ def test_delete_custom_order(
     assert result
 
     custom_order = mongo_connection["custom-sortings"].find_one(
-        filter={"resource_id": populate_db[1].id, "position": 2}
+        filter={"resource_id": populate_db[1].id, "position": 1}
     )
     assert custom_order is None
 

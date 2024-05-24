@@ -64,19 +64,20 @@ def populate_db(
         }
         for i in range(1, 4)
     ]
-    objects.append(
-        {
-            "_id": PyObjectId(),
-            "name": "thing7",
-            "created_by": creators_instances[1].model_dump(by_alias=True),
-        }
-    )
+    for i in range(3):
+        objects.append(
+            {
+                "_id": PyObjectId(),
+                "name": f"thing{i}",
+                "created_by": creators_instances[1].model_dump(by_alias=True),
+            }
+        )
 
     db["things-test"].insert_many(objects)
     sorting_instance.reorder_one(
         creator=creators_instances[1],
         resource_id=objects[-1]["_id"],  # type: ignore
-        position=3,
+        position=2,
     )
 
     return [Thing(**obj) for obj in objects]  # type: ignore
