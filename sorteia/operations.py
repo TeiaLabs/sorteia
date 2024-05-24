@@ -45,15 +45,17 @@ T = TypeVar("T")
 
 
 class Sortings:
-    """
-    Operations to manipulate custom ordered objects.
+    """Operations to manipulate custom ordered objects.
+
     Allows arbitrary sorting instead of attribute-based sorting.
     First position = 0, second position = 1, and so on.
-
     Works based on the following assumptions:
     - 1 document per user per resource.
     - Allow multiple users to sort the same documents differently.
     - Allow for a large number of items to be sorted.
+    To get all of the objects on the correct custom order, the client
+    must run `read_all_ordered_objects` that returns a list of the
+    model passed as parameter.
 
     Model saved on the database:
     ```python
@@ -67,9 +69,6 @@ class Sortings:
         resource_id: PyObjectId
     ```
 
-    After a read many +sorted +join, the client should run a GET /{resource}
-    and either: set.subtract() the IDs he already has; or pass in the unwanted
-    IDs to a {_id: {$nin [ids]}}; or allow with the duplicate items.
     """
 
     def __init__(
@@ -78,13 +77,17 @@ class Sortings:
         alias: str = "default",
         db_name: str = DB_NAME,
     ):
-        """
+        """Initializes the object to use its core operations.
+
         Initializes the Sortings object so the client can manipulate custom
         ordered objects. Saves the custom ordered objetcs on a collection
         named `custom-sortings` on the same database as the collection to be sorted.
-        `collection_name`: collection name of the elements to be sorted
-        `alias`: alias of the database connection, default is `default`
-        `db_name`: name of the database, if not, it will get from env variables (`DB_NAME`)
+        This database will be determined by the `alias` and `db_name` parameters.
+
+        Args:
+            collection_name (str): collection name of the elements to be sorted
+            alias (str, optional): alias of the database connection, default is `default`
+            db_name (str, optional): name of the database, if not, it will get from env variables (`DB_NAME`)
         """
 
         logger.debug(f"Initializing Sortings for {collection_name}")
@@ -102,19 +105,20 @@ class Sortings:
         position: int,
         background_task: BackgroundTasks | None,
     ) -> ReorderOneUpsertedOut | ReorderOneUpdatedOut:
-        """
-        Reorders a resource in the custom order.
-        `creator`: Creator object
-        `resource_id`: ObjectId of the resource to be ordered
-        `position`: int position to be set
+        """Reorders a resource in the custom order.
 
-        Raises `ObjectToBeSortedNotFound` if the object to be sorted does not
-        exist on the targeted collection.
+        Args:
+            creator(Creator): Creator object
+            resource_id(PyObjectId): ObjectId of the resource to be ordered
+            position(int): position to be set (0 is the first position)
 
-        Raises `CustomOrderNotSaved` if the custom order could not be saved - maybe
-        because of an internal error.
+        Returns:
+            The object that was reordered and updated or inserted on the collection.
 
-        Raises `PostionOutOfBounds` if the position is out of bounds.
+        Raises:
+            ObjectToBeSortedNotFound: if the object to be sorted does not exist on the targeted collection.
+            CustomOrderNotSaved: if the custom order could not be saved - maybe because of an internal error.
+            PostionOutOfBounds: if the position is out of bounds.
         """
 
         # check if user is owner of that resource to reorder it
@@ -173,7 +177,7 @@ class Sortings:
         )
 
         if result.upserted_id is not None:
-            return ReorderOneUpsertedOut(
+            result = ReorderOneUpsertedOut(
                 id=result.upserted_id,
                 created_at=created_at,
                 updated_at=updated_at,
@@ -183,7 +187,7 @@ class Sortings:
             object = self.sortings.find_one(filter=filter)
             if object is None:
                 raise CustomOrderNotSaved
-            return ReorderOneUpdatedOut(
+            result = ReorderOneUpdatedOut(
                 id=object["_id"],
                 updated_at=updated_at,
             )
@@ -207,10 +211,7 @@ class Sortings:
         resources: list[ReorderManyResourcesIn],
         creator: Creator,
     ) -> pymongo.results.BulkWriteResult:
-        """
-        Reorders many resources in the custom order sent as body.
-        `resources`: resources to be reordered
-        `creator`: Creator object
+        """Reorders many resources in the custom order sent as body.
 
         Type of body to send as `resources`:
         ```
@@ -219,10 +220,21 @@ class Sortings:
             "resource_ref": "resource.$ref",
             "position": 0,
         }]
-
-        WARNING: sent `ids` are not checked if they exist on the collection to be sorted because of the many different searches on the database necessary.
-        Make sure to check it before sending the request.
         ```
+        WARNING: sent `ids` are not checked if they exist on the collection
+        to be sorted because of the many different searches on the database necessary.
+        Make sure to check it before sending the request.
+
+        Args:
+            resources(list[ReorderManyResourcesIn]): resources to be reordered.
+            creator(Creator): Creator object.
+
+        Returns:
+            BulkWriteResult object from pymongo.
+
+        Raises:
+            PositionOutOfBounds: if the position is out of bounds.
+
         """
         max_position: int = self.database[self.collection].count_documents(
             filter={
@@ -265,9 +277,13 @@ class Sortings:
         return result
 
     def read_many(self, creator: Creator) -> list[CustomSorting]:
-        """
-        Returns the objects in the order they were sorted.
-        `creator`: Creator object
+        """Returns the objects in the order they were sorted.
+
+        Args:
+            creator(Creator): Creator object.
+
+        Returns:
+            a list of CustomSorting objects.
         """
         # TODO: change this Any to specific type
         custom_sortings: pymongo.cursor.Cursor[Any] = self.sortings.find(
@@ -282,9 +298,13 @@ class Sortings:
     def read_many_whole_object(
         self, creator: Creator
     ) -> list[CustomSortingWithResource[T]]:
-        """
-        Returns the objects in the order they were sorted.
-        `creator`: Creator object
+        """Returns the objects in the order they were sorted.
+
+        Args:
+            creator(Creator): Creator object.
+
+        Returns:
+            a list of CustomSortingWithResource objects.
         """
         # TODO: change this Any to specific type
         custom_sortings: pymongo.command_cursor.CommandCursor[Any] = (
@@ -324,14 +344,15 @@ class Sortings:
     def delete_one(
         self, position: int, creator: Creator, background_task: BackgroundTasks | None
     ) -> pymongo.results.DeleteResult:
-        """
-        Deletes a resource from the custom order according to the position.
+        """Deletes a resource from the custom order according to the position.
 
-        `position`: int position to be deleted
-        `creator`: Creator object
-        `background_task`: BackgroundTasks object (comes from route dependency), send None to not update the other objects positions after deletion
+        Args:
+            position(int): position to be deleted.
+            creator(Creator): Creator object.
+            background_task(BackgroundTasks): send None to not update the other objects positions after deletion.
 
-        Raises `CustomOrderNotFound` if the custom order could not be found to be deleted.
+        Raises:
+            CustomOrderNotFound: if the custom order could not be found to be deleted.
         """
         user_email = creator.user_email
 
@@ -356,13 +377,12 @@ class Sortings:
     def read_all_ordered_objects(
         self, creator: Creator, model: Type[T], **filters
     ) -> list[T]:
-        """
-        Reads all objects from the collection sorted by the custom order - includes
-        the ones that don't have the custom order set yet and the ones that already have.
+        """Reads all objects from the collection already sorted by the custom order.
 
-        `creator`: Creator object
-        `model`: Pydantic model to be used to create the objects
-        `filters`: filters to be applied to the find query on the `model` collection
+        Args:
+            creator(Creator): Creator object.
+            model(Type[T]): Pydantic model to be used to create the objects.
+            **filters: filters to be applied to the find query on the `model` collection.
         """
         query: dict[str, Any] = {k: v for k, v in filters.items() if v is not None}
 
@@ -397,8 +417,11 @@ class Sortings:
 
     @classmethod
     def create_search_indexes(cls, mongo_uri: str, db_name: str) -> None:
-        """
-        Creates the indexes needed for the custom sortings.
+        """Creates the indexes needed for the custom sortings.
+
+        Args:
+            mongo_uri(str): URI to connect to the MongoDB database.
+            db_name(str): name of the database to create the indexes.
         """
         logger.debug("Creating indexes for custom sortings")
         client = pymongo.MongoClient(mongo_uri)

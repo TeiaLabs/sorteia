@@ -45,16 +45,18 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         ),
         creator: Creator = Depends(privileges.is_valid_user),
     ) -> list[CustomSortingWithResource[T] | CustomSorting]:  # type: ignore
-        """
-        Returns the custom order of a resource.
+        """Returns the custom order of a resource.
 
-        If header `X-Resolve-Refs` is set to `$resource_ref`, it will return the custom order with the whole object. If `no`, it will return only the custom order without the whole object.
-        `resource`: str resource name
+        Args:
+            resource (str): resource name.
+            sort (Literal["position"], optional): sort by position. Defaults to Query(default="position", alias="sort").
+            resolve_refs (Literal["$resource_ref", "no"], optional): resolve references. Defaults to Header(default="no", alias="X-Resolve-Refs").
+            creator (Creator): Creator object
 
-        `resource`: str resource name
-        `sort`: Literal["position"] sort by position
-        `resolve_refs`: Literal["$resource_ref", "no"] resolve references
-        `creator`: Creator object
+        Returns:
+            a list of CustomSortingWithResource or CustomSorting objects. Depending on the `X-Resolve-Refs` header.
+            If header `X-Resolve-Refs` is set to `$resource_ref`, it will return the custom order with the whole object.
+            If `no`, it will return only the custom order without the whole object.
         """
         org = creator.user_email.split("@")[1].split(".")[0]
         if resolve_refs == "$resource_ref":
@@ -65,21 +67,25 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
     def reorder_one(  # type: ignore
         resource: str,
         position: int,
+        background_task: BackgroundTasks,
         body: ReorderOneResourceIn = Body(..., openapi_examples=ReorderOneResourceIn.Config.examples),  # type: ignore
         creator: Creator = Depends(privileges.is_valid_user),
     ) -> ReorderOneUpdatedOut | ReorderOneUpsertedOut:
-        """
-        Reorders a resource in the custom order.
+        """Reorders a resource in the custom order.
 
-        `resource`: str resource name
-        `position`: int position to be inserted
-        `body`: ReorderOneResourceIn resource_id to be inserted
-        `creator`: Creator object
+        Args:
+            resource(str): resource name.
+            position(int): position to be inserted.
+            body(ReorderOneResourceIn): ReorderOneResourceIn resource_id to be inserted.
+            creator(Creator): Creator object.
 
-        Type of the ReorderOneResourceIn:
-        ```
-        {"resource_id": "pyobjectid"}
-        ```
+        Returns:
+            ReorderOneUpdatedOut or ReorderOneUpsertedOut object.
+
+        Raises:
+            HTTPException: (404) Object to be sorted not found.
+            HTTPException: (400) Custom order not saved - maybe because of an internal error.
+            HTTPException: (400) Position is out of bounds.
         """
         org = creator.user_email.split("@")[1].split(".")[0]
         try:
@@ -119,12 +125,18 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         background_task: BackgroundTasks,
         creator: Creator = Depends(privileges.is_valid_user),
     ) -> None:
-        """
-        Deletes a resource from the custom order.
+        """Deletes a resource from the custom order.
 
-        `resource`: str resource name
-        `position`: int position to be deleted
-        `creator`: Creator object
+        Args:
+            resource(str): resource name.
+            position(int): position to be deleted.
+            creator(Creator): Creator object.
+
+        Returns:
+            None
+
+        Raises:
+            HTTPException: (404) Custom order not found.
         """
         org = creator.user_email.split("@")[1].split(".")[0]
         try:
@@ -141,18 +153,17 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         body: list[ReorderManyResourcesIn] = Body(..., openapi_examples=ReorderManyResourcesIn.Config.examples),  # type: ignore
         creator: Creator = Depends(privileges.is_valid_user),
     ) -> None:
-        """
-        `resource`: str resource name
-        `body`: list[ReorderManyResourcesIn] resources to be reordered
+        """Reorders many resources in the custom order.
 
-        Type of the ReorderManyResourcesIn:
-        ```
-        [{
-            "resource_id": "resource.$id",
-            "resource_ref": "resource.$ref",
-            "position": 0,
-        }]
-        ```
+        Args:
+            resource(str): resource name.
+            body(list[ReorderManyResourcesIn]): resources to be reordered.
+
+        Returns:
+            None
+
+        Raises:
+            HTTPException: (400) Position is out of bounds.
         """
         org = creator.user_email.split("@")[1].split(".")[0]
         try:
