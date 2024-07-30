@@ -3,16 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-from tauth.schemas import Creator  # type: ignore
+from tauth.schemas import Infostar
 
-from sorteia.utils import PyObjectId
+from redbaby.pyobjectid import PyObjectId
 
 
 class CustomSorting(BaseModel):
     id: PyObjectId = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
-    created_by: Creator
+    created_by: Infostar
     position: int
     resource_collection: str
     resource_id: PyObjectId

@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
-from tauth.schemas import Creator  # type: ignore
+from tauth.schemas import Infostar
 
-from sorteia.utils import PyObjectId
+from redbaby.pyobjectid import PyObjectId
 
 T = TypeVar("T")
 
@@ -44,7 +44,7 @@ class ReorderOneUpsertedOut(BaseModel):
     id: PyObjectId
     created_at: datetime
     updated_at: datetime
-    created_by: Creator
+    created_by: Infostar
 
 
 class ReorderOneUpdatedOut(BaseModel):
@@ -56,7 +56,7 @@ class CustomSortingWithResource(BaseModel, Generic[T]):
     id: PyObjectId = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
-    created_by: Creator
+    created_by: Infostar
     position: int
     resource_id: PyObjectId
     resource: T  # actual resource

@@ -12,8 +12,7 @@ from fastapi import (
     Query,
 )
 from loguru import logger
-from tauth.injections import privileges  # type: ignore
-from tauth.schemas import Creator  # type: ignore
+from tauth.schemas import Infostar
 
 from sorteia.exceptions import (
     CustomOrderNotFound,
@@ -31,6 +30,7 @@ from ..schemas import (
     ReorderOneUpdatedOut,
     ReorderOneUpsertedOut,
 )
+from sorteia import state_getter
 
 
 def add_sorting_resources_dependency(app: FastAPI) -> None:
@@ -43,7 +43,7 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         resolve_refs: Literal["$resource_ref", "no"] = Header(
             default="no", alias="X-Resolve-Refs"
         ),
-        creator: Creator = Depends(privileges.is_valid_user),
+        infostar: Infostar = Depends(state_getter.get("infostar")),
     ) -> list[CustomSortingWithResource[T] | CustomSorting]:  # type: ignore
         """Returns the custom order of a resource.
 
@@ -58,10 +58,10 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
             If header `X-Resolve-Refs` is set to `$resource_ref`, it will return the custom order with the whole object.
             If `no`, it will return only the custom order without the whole object.
         """
-        org = creator.user_email.split("@")[1].split(".")[0]
+        org = infostar.authprovider_org
         if resolve_refs == "$resource_ref":
-            return Sortings(collection_name=resource, alias=org, db_name=org).read_many_whole_object(creator=creator)  # type: ignore
-        return Sortings(collection_name=resource, alias=org, db_name=org).read_many(creator=creator)  # type: ignore
+            return Sortings(collection_name=resource, alias=org, db_name=org).read_many_whole_object(infostar=infostar)  # type: ignore
+        return Sortings(collection_name=resource, alias=org, db_name=org).read_many(infostar=infostar)  # type: ignore
 
     @router.put("/{resource}/{position}", status_code=201)
     def reorder_one(  # type: ignore
@@ -69,7 +69,7 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         position: int,
         background_task: BackgroundTasks,
         body: ReorderOneResourceIn = Body(..., openapi_examples=ReorderOneResourceIn.Config.examples),  # type: ignore
-        creator: Creator = Depends(privileges.is_valid_user),
+        infostar: Infostar = Depends(state_getter.get("infostar")),
     ) -> ReorderOneUpdatedOut | ReorderOneUpsertedOut:
         """Reorders a resource in the custom order.
 
@@ -87,12 +87,12 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
             HTTPException: (400) Custom order not saved - maybe because of an internal error.
             HTTPException: (400) Position is out of bounds.
         """
-        org = creator.user_email.split("@")[1].split(".")[0]
+        org = infostar.authprovider_org
         try:
             return Sortings(
                 collection_name=resource, alias=org, db_name=org
             ).reorder_one(
-                creator=creator,
+                infostar=infostar,
                 resource_id=body.resource_id,
                 position=position,
                 background_task=background_task,
@@ -123,7 +123,7 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         resource: str,
         position: int,
         background_task: BackgroundTasks,
-        creator: Creator = Depends(privileges.is_valid_user),
+        infostar: Infostar = Depends(state_getter.get("infostar")),
     ) -> None:
         """Deletes a resource from the custom order.
 
@@ -138,10 +138,10 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         Raises:
             HTTPException: (404) Custom order not found.
         """
-        org = creator.user_email.split("@")[1].split(".")[0]
+        org = infostar.authprovider_org
         try:
             Sortings(collection_name=resource, alias=org, db_name=org).delete_one(
-                position, creator, background_task
+                position, infostar, background_task
             )
         except CustomOrderNotFound:
             logger.error("Custom sorting to be deleted was not found.")
@@ -151,7 +151,7 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
     def reorder_many(  # type: ignore
         resource: str,
         body: list[ReorderManyResourcesIn] = Body(..., openapi_examples=ReorderManyResourcesIn.Config.examples),  # type: ignore
-        creator: Creator = Depends(privileges.is_valid_user),
+        infostar: Infostar = Depends(state_getter.get("infostar")),
     ) -> None:
         """Reorders many resources in the custom order.
 
@@ -165,10 +165,10 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         Raises:
             HTTPException: (400) Position is out of bounds.
         """
-        org = creator.user_email.split("@")[1].split(".")[0]
+        org = infostar.authprovider_org
         try:
             Sortings(collection_name=resource, alias=org, db_name=org).reorder_many(
-                resources=body, creator=creator
+                resources=body, infostar=infostar
             )
         except PositionOutOfBounds as e:
             logger.error("Position is out of bounds.")

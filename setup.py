@@ -41,7 +41,7 @@ extra_requirements = get_optional_requirements()
 
 setuptools.setup(
     name="sorteia",
-    version=get_version(),
+    version="1",
     author="TeiaLabs",
     author_email="contato@teialabs.com",
     description="Text sorteia.",
