@@ -44,9 +44,7 @@ creator = Creator(
 
 print(
     sortings_2.reorder_one(
-        creator=creator,
-        resource_id=items_2[0]["_id"],
-        position=4,
+        creator=creator, resource_id=items_2[0]["_id"], position=4, background_task=None
     )
 )
 

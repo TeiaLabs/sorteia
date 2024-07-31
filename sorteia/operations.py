@@ -121,9 +121,7 @@ class Sortings:
         """
 
         # check if user is owner of that resource to reorder it
-        logger.debug(
-            f"Searching for object to be sorted on {self.collection} on {DB.get().name}"
-        )
+        logger.debug(f"Searching for object to be sorted on {self.collection}")
         object_sorted = self.database[self.collection].find_one(
             filter={
                 "_id": resource_id,
@@ -133,12 +131,16 @@ class Sortings:
         )
         if object_sorted is None:
             raise ObjectToBeSortedNotFound
+        logger.debug("Object to be sorted found")
 
-        max_position: int = self.database[self.collection].count_documents(
-            filter={
-                "created_by.user_handle": infostar.user_handle,
-                "created_by.authprovider_org": infostar.authprovider_org,
-            }
+        max_position: int = (
+            self.database[self.collection].count_documents(
+                filter={
+                    "created_by.user_handle": infostar.user_handle,
+                    "created_by.authprovider_org": infostar.authprovider_org,
+                }
+            )
+            - 1  # position start at 0
         )
         if position > max_position or position < 0:
             raise PositionOutOfBounds(
@@ -148,6 +150,7 @@ class Sortings:
                     "position": position,
                 },
             )
+        logger.debug(f"Position is within bounds - bound: {max_position}")
 
         filter = {
             "resource_collection": self.collection,
@@ -155,6 +158,7 @@ class Sortings:
             "created_by.user_handle": infostar.user_handle,
             "created_by.authprovider_org": infostar.authprovider_org,
         }
+        logger.debug(f"Filter to search for the object to be sorted created: {filter}")
 
         updated_at = datetime.now()
         created_at = datetime.now()
@@ -177,6 +181,9 @@ class Sortings:
             update=update,
             upsert=True,
         )
+        logger.debug(
+            f"Object sorted updated or inserted on the custom sortings collection: {result}"
+        )
 
         if result.upserted_id is not None:
             result = ReorderOneUpsertedOut(
@@ -197,6 +204,7 @@ class Sortings:
             raise CustomOrderNotSaved
 
         if background_task:
+            logger.debug("Background task to update the other objects positions")
             background_task.add_task(
                 self.sortings.update_many,
                 filter={
@@ -402,6 +410,7 @@ class Sortings:
         """
         query: dict[str, Any] = {k: v for k, v in filters.items() if v is not None}
 
+        logger.debug(f"Searching for objects in the collection {self.collection}")
         unordered_objs: pymongo.cursor.Cursor[Any] = self.database[
             self.collection
         ].find(query)

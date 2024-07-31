@@ -89,9 +89,8 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         """
         org = infostar.authprovider_org
         try:
-            return Sortings(
-                collection_name=resource, alias=org, db_name=org
-            ).reorder_one(
+            sortings = Sortings(collection_name=resource, alias=org, db_name=org)
+            return sortings.reorder_one(
                 infostar=infostar,
                 resource_id=body.resource_id,
                 position=position,
