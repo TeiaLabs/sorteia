@@ -364,6 +364,55 @@ class Sortings:
         )
         return list(custom_sortings)
 
+    def read_many_entire_list(
+        self,
+        infostar: Infostar,
+        offset: int,
+        limit: int,
+        projection: dict[str, Any] | None = None,
+        **filters,
+    ):
+        object_colletion = self.database[self.collection]
+
+        filtering = {k: v for k, v in filters.items() if v is not None}
+        projection = projection or {}
+        aggregation = [
+            {
+                "$match": {
+                    **filtering,
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "custom-sortings",
+                    "localField": "_id",
+                    "foreignField": "resource_id",
+                    "as": "order",
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$order",
+                    "preserveNullAndEmptyArrays": True,
+                }
+            },
+            {
+                "$sort": {
+                    "order.position": pymongo.ASCENDING,
+                }
+            },
+            {
+                "$skip": offset,
+            },
+            {
+                "$limit": limit,
+            },
+            {"$project": {"order": 0, **projection}},
+        ]
+
+        sorted_objects = object_colletion.aggregate(aggregation)
+        return sorted_objects
+
     def delete_one(
         self, position: int, infostar: Infostar, background_task: BackgroundTasks | None
     ) -> pymongo.results.DeleteResult:
