@@ -142,6 +142,10 @@ class Sortings:
             )
             - 1  # position start at 0
         )
+        # last position
+        if position == -1:
+            position = max_position
+
         if position > max_position or position < 0:
             raise PositionOutOfBounds(
                 message=f"Position out of bounds: {position} cannot be bigger than {max_position}",
