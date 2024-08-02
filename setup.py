@@ -41,10 +41,10 @@ extra_requirements = get_optional_requirements()
 
 setuptools.setup(
     name="sorteia",
-    version="1",
+    version=get_version(),
     author="TeiaLabs",
     author_email="contato@teialabs.com",
-    description="Text sorteia.",
+    description="Package for custom sorting resources on a mongoDB collection.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/TeiaLabs/sorteia",
