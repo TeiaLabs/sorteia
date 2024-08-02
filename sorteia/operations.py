@@ -107,7 +107,7 @@ class Sortings:
         """Reorders a resource in the custom order.
 
         Args:
-            creator(Creator): Creator object
+            infostar(Infostar): Infostar object.
             resource_id(PyObjectId): ObjectId of the resource to be ordered
             position(int): position to be set (0 is the first position)
 
@@ -242,7 +242,7 @@ class Sortings:
 
         Args:
             resources(list[ReorderManyResourcesIn]): resources to be reordered.
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
 
         Returns:
             BulkWriteResult object from pymongo.
@@ -300,7 +300,7 @@ class Sortings:
         """Returns the objects in the order they were sorted.
 
         Args:
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
 
         Returns:
             a list of CustomSorting objects.
@@ -323,7 +323,7 @@ class Sortings:
         """Returns the objects in the order they were sorted.
 
         Args:
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
 
         Returns:
             a list of CustomSortingWithResource objects.
@@ -364,23 +364,35 @@ class Sortings:
         )
         return list(custom_sortings)
 
-    def read_many_entire_list(
+    def read_many_entire_collection(
         self,
         infostar: Infostar,
         offset: int,
         limit: int,
         projection: dict[str, Any] | None = None,
         **filters,
-    ):
+    ) -> pymongo.command_cursor.CommandCursor[Any]:
+        """Returns the objects in the order they were sorted, and adds the objects
+          that were not sorted yet at the end of the list (sorted by created_at).
+
+        Args:
+            infostar(Infostar): Infostar object.
+            offset(int): number of objects to skip.
+            limit(int): number of objects to return.
+            projection(dict[str, Any]): projection to be applied to the find query.
+            **filters: filters to be applied to the find query on the `model` collection.
+
+        Returns:
+            CommandCursor object from pymongo (Iterable).
+        """
         object_colletion = self.database[self.collection]
 
         filtering = {k: v for k, v in filters.items() if v is not None}
+
         projection = projection or {}
         aggregation = [
             {
-                "$match": {
-                    **filtering,
-                }
+                "$match": filtering,
             },
             {
                 "$lookup": {
@@ -397,8 +409,14 @@ class Sortings:
                 }
             },
             {
+                "$addFields": {
+                    "order.position": {"$ifNull": ["$order.position", float("inf")]}
+                }
+            },
+            {
                 "$sort": {
                     "order.position": pymongo.ASCENDING,
+                    "created_at": pymongo.DESCENDING,
                 }
             },
             {
@@ -420,7 +438,7 @@ class Sortings:
 
         Args:
             position(int): position to be deleted.
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
             background_task(BackgroundTasks): send None to not update the other objects positions after deletion.
 
         Raises:
@@ -454,10 +472,11 @@ class Sortings:
     def read_all_ordered_objects(
         self, infostar: Infostar, model: Type[T], **filters
     ) -> list[T]:
-        """Reads all objects from the collection already sorted by the custom order.
+        """Reads all objects from the collection already sorted by the custom order. (Loads on memory to sort)
+
 
         Args:
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
             model(Type[T]): Pydantic model to be used to create the objects.
             **filters: filters to be applied to the find query on the `model` collection.
         """
@@ -478,7 +497,7 @@ class Sortings:
         logger.debug(f"Found {len(sorted_objs)} objects of these already sorted")
 
         custom_sortings_set: Set[PyObjectId] = {
-            obj["resource_id"] for obj in sorted_objs
+            obj["resource_id"] for obj in sorted_objs  # type: ignore
         }
         filtered_objs: list[model] = [
             obj for obj in unordered_objs_list if obj["_id"] not in custom_sortings_set
@@ -489,7 +508,7 @@ class Sortings:
 
         for sorting in sorted_objs:
             obj = model(**sorting["resource"], _id=sorting["resource_id"])  # type: ignore
-            filtered_objs.insert(sorting["position"], obj)
+            filtered_objs.insert(sorting["position"], obj)  # type: ignore
 
         return filtered_objs
 

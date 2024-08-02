@@ -1,5 +1,3 @@
-from typing import Literal
-
 from annotated_types import T
 from fastapi import (
     APIRouter,
@@ -7,9 +5,7 @@ from fastapi import (
     Body,
     Depends,
     FastAPI,
-    Header,
     HTTPException,
-    Query,
 )
 from loguru import logger
 from tauth.schemas import Infostar
@@ -36,35 +32,30 @@ from sorteia import state_getter
 def add_sorting_resources_dependency(app: FastAPI) -> None:
     router = APIRouter(prefix="/sortings", tags=["sortings"])
 
+    @router.get("/{resource}/", status_code=200, include_in_schema=False)
     @router.get("/{resource}", status_code=200)
-    def get_sortings(  # type: ignore
+    def get_sortings(
         resource: str,
-        sort: Literal["position"] = Query(default="position", alias="sort"),
-        resolve_refs: Literal["$resource_ref", "no"] = Header(
-            default="no", alias="X-Resolve-Refs"
-        ),
         infostar: Infostar = Depends(state_getter.get("infostar")),
-    ) -> list[CustomSortingWithResource[T] | CustomSorting]:  # type: ignore
-        """Returns the custom order of a resource.
+    ) -> list[CustomSortingWithResource[T]] | list[CustomSorting]:
+        """Returns all custom order documents of a resource.
 
-        Args:
-            resource (str): resource name.
-            sort (Literal["position"], optional): sort by position. Defaults to Query(default="position", alias="sort").
-            resolve_refs (Literal["$resource_ref", "no"], optional): resolve references. Defaults to Header(default="no", alias="X-Resolve-Refs").
-            creator (Creator): Creator object
-
-        Returns:
-            a list of CustomSortingWithResource or CustomSorting objects. Depending on the `X-Resolve-Refs` header.
-            If header `X-Resolve-Refs` is set to `$resource_ref`, it will return the custom order with the whole object.
-            If `no`, it will return only the custom order without the whole object.
+        - 200: OK
+        - 400: Bad request
+        - 401: Bad token
+        - 403: Forbidden
+        - 422: Unprocessable user input (bad body/query params)
+        - 424: Problem with upstream server (e.g.: OpenAI)
+        - 500: Internal server error
         """
         org = infostar.authprovider_org
-        if resolve_refs == "$resource_ref":
-            return Sortings(collection_name=resource, alias=org, db_name=org).read_many_whole_object(infostar=infostar)  # type: ignore
-        return Sortings(collection_name=resource, alias=org, db_name=org).read_many(infostar=infostar)  # type: ignore
+        return Sortings(collection_name=resource, alias=org, db_name=org).read_many(
+            infostar=infostar
+        )
 
     @router.put("/{resource}/{position}", status_code=201)
-    def reorder_one(  # type: ignore
+    @router.put("/{resource}/{position}/", status_code=201, include_in_schema=False)
+    def reorder_one(
         resource: str,
         position: int,
         background_task: BackgroundTasks,
@@ -73,19 +64,12 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
     ) -> ReorderOneUpdatedOut | ReorderOneUpsertedOut:
         """Reorders a resource in the custom order.
 
-        Args:
-            resource(str): resource name.
-            position(int): position to be inserted.
-            body(ReorderOneResourceIn): ReorderOneResourceIn resource_id to be inserted.
-            creator(Creator): Creator object.
-
-        Returns:
-            ReorderOneUpdatedOut or ReorderOneUpsertedOut object.
-
-        Raises:
-            HTTPException: (404) Object to be sorted not found.
-            HTTPException: (400) Custom order not saved - maybe because of an internal error.
-            HTTPException: (400) Position is out of bounds.
+        - 201: Created
+        - 400: Bad request (e.g.: position out of bounds)
+        - 401: Bad token
+        - 403: Forbidden
+        - 404: Object to be sorted not found
+        - 500: Custom order not saved or Internal server error
         """
         org = infostar.authprovider_org
         try:
@@ -107,7 +91,7 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         except CustomOrderNotSaved:
             logger.error("Custom order could not be saved.")
             raise HTTPException(
-                status_code=400,
+                status_code=500,
                 detail="Custom order not saved - maybe because of an internal error.",
             )
         except PositionOutOfBounds as e:
@@ -118,7 +102,8 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
             )
 
     @router.delete("/{resource}/{position}", status_code=204)
-    def delete_sorting(  # type: ignore
+    @router.delete("/{resource}/{position}/", status_code=204, include_in_schema=False)
+    def delete_sorting(
         resource: str,
         position: int,
         background_task: BackgroundTasks,
@@ -126,16 +111,14 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
     ) -> None:
         """Deletes a resource from the custom order.
 
-        Args:
-            resource(str): resource name.
-            position(int): position to be deleted.
-            creator(Creator): Creator object.
-
-        Returns:
-            None
-
-        Raises:
-            HTTPException: (404) Custom order not found.
+        - 204: No content
+        - 400: Bad request
+        - 401: Bad token
+        - 403: Forbidden
+        - 404: Custom order to be deleted not found
+        - 422: Unprocessable user input (bad body/query params)
+        - 424: Problem with upstream server (e.g.: OpenAI)
+        - 500: Internal server error
         """
         org = infostar.authprovider_org
         try:
@@ -147,22 +130,19 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Custom order not found.")
 
     @router.put("/{resource}", status_code=204)
-    def reorder_many(  # type: ignore
+    @router.put("/{resource}/", status_code=204)
+    def reorder_many(
         resource: str,
         body: list[ReorderManyResourcesIn] = Body(..., openapi_examples=ReorderManyResourcesIn.Config.examples),  # type: ignore
         infostar: Infostar = Depends(state_getter.get("infostar")),
     ) -> None:
         """Reorders many resources in the custom order.
 
-        Args:
-            resource(str): resource name.
-            body(list[ReorderManyResourcesIn]): resources to be reordered.
-
-        Returns:
-            None
-
-        Raises:
-            HTTPException: (400) Position is out of bounds.
+        - 204: No content
+        - 400: Bad request (e.g.: position out of bounds)
+        - 401: Bad token
+        - 403: Forbidden
+        - 500: Internal server error
         """
         org = infostar.authprovider_org
         try:
