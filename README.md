@@ -11,14 +11,14 @@ class CustomSorting(BaseModel):
     id: PyObjectId = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
-    created_by: Creator
+    created_by: Infostar
     position: int
     resource_collection: str 
     resource_id: PyObjectId
 ```
 _Observation:_ `resource_collection` and `resource_id` used to be a DBRef, but its attributes made it hard to read from database.
 
-## Schemas - In
+## Schemas -> In
 ```python
 class ReorderManyResourcesIn(BaseModel):
     resource_id: PyObjectId
@@ -51,7 +51,7 @@ class ReorderOneResourceIn(BaseModel):
 {"resource_id": "pyobjectid"}
 ```
 
-## Schemas - Out
+## Schemas -> Out
 ```python
 class ReorderOneUpsertedOut(BaseModel):
     id: PyObjectId
@@ -83,10 +83,11 @@ class CustomSortingWithResource(Generic[T], BaseModel):
 
 ## Class Sortings
 Contains the core operations used to order the elements. Elements always filtered by the creator. 
-When initializing the class, pass as arguments `collection_name`, `alias` and `db_name`: 
+
+> When initializing the class, pass as arguments `collection_name`, `alias` and `db_name`. 
 
 #### reorder_one
-Reorders a resource in the custom order by upserting a `CustomSorting` object.
+Reorders a resource in the custom order by upserting a `CustomSorting` object. If you send -1 the position will be set as the max_position (as the last document in the collection)
 Out: `ReorderOneUpsertedOut` | `ReorderOneUpdatedOut`
 
 #### reorder_many
@@ -101,15 +102,20 @@ Out: `list[CustomSorting]`
 Returns the `CustomSorting` object with the whole object as an attribute named resource ($lookup), in the order they were sorted.
 Out: `list[CustomSortingWithResource[T]]`
 
+#### read_many_entire_collection
+Returns all of the objects (the ordered and not ordered as well) in the order they were sorted. The objects that have not been ordered yet (don't have a custom-sorting document associated with) will be inserted at the end of the list (sorted by the created_at date - descending).
+It uses mongoDB left join to sort the documents that already have a custom-sorting (sort by the field position).
+Out: `CommandCursor[Any]` 
+
 #### delete_one
-Delete a resource from the custom order according to the position. 
+Delete a resource from the custom order using the resource_id as reference. 
 Out: `DeleteResult`
 
 #### read_all_ordered_objects
-Reads the objects in order - reads the objecs that do not have the custom order and the ones who has it.
+Reads the objects in order - reads the objects that do not have the custom order and the ones who has it. It loads all of the objects into memory (not recommended).
 Out: `list[model]`
 
-### Example of use:
+### Example of raw use:
 ```python
 # can initiate Sortings with or without alias and db_name
 Sortings(
@@ -122,16 +128,17 @@ Sortings(
     )
 
 Sortings(collection_name=resource).delete_one(
-          position, creator, background_task
+        resource_id, creator, background_task
       )
 ```
 All of the Sortings class methods work the same way, by initiating a Sortings object and calling any available method.
 
 
 ## Routes dependencies
-First of all, call `create_search_indexes` passing as arguments `mongo_uri` and `db_name` to create the indexes on the correct database.
+First of all, call `create_search_indexes` passing as arguments `mongo_uri` and `db_name` to create the indexes in the correct database.
 
-### Example of use:
+### How to use it on an API:
+#### 1. Create the `indexes` that are required to perform search operations later.
 ```python
 from sorteia.operations import Sortings
 
@@ -140,18 +147,41 @@ Sortings.create_search_indexes(
     mongo_uri=DB.get_client(alias=alias).HOST,
     db_name=DB.get(alias=alias).name,
 )
+```
+
+#### 2. Initialize the routes dependencies using the method `add_sorting_resources_dependency()` as seen below.
+```python
+from sorteia.dependencies import sorting_resources
 
 # include route dependencies
 router = APIRouter(prefix="/api")
 sorting_resources.add_sorting_resources_dependency(app)
 ```
-With the last command (`add_sorting_resources_dependency`), the following routes will be included to the api:
+With that command, the following routes will be included to the api:
 - get_sortings
 - reorder_one
 - reorder_many
 - delete_sorting
 
-To get all of the elements in the custom order as a /GET, you should include a method similar to this one:
-```python
 
+#### 3. Adapt your desired `/GET` operations to return the custom sorted documents. 
+```python
+from sortings.operations import Sortings
+
+sortings = Sortings(
+    collection_name="collection_name", alias=org, db_name=org
+)
+
+filtering = { 
+    "name": "testing"
+}
+result = sortings.read_many_entire_collection(
+    infostar=infostar,
+    offset=offset,
+    limit=limit,
+    projection=projection,
+    **filtering,
+)
 ```
+> [!TIP]
+> For each new document created in the desired collection (that will be custom sorted at some point), create a new sorting with position set as `-1`, so the document will have the last position in the list, and will be easier to perform reorder operations later.
