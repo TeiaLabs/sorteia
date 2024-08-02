@@ -144,7 +144,7 @@ class Sortings:
         )
         # last position
         if position == -1:
-            position = max_position
+            position = int("inf")
 
         if position > max_position or position < 0:
             raise PositionOutOfBounds(
