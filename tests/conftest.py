@@ -3,21 +3,20 @@ from typing import Any
 
 import pytest
 from dotenv import load_dotenv
+from loguru import logger
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 from pymongo.database import Database
-from tauth.schemas import Creator  # type: ignore
+from redbaby.pyobjectid import PyObjectId
+from tauth.schemas.infostar import Infostar, InfostarExtra
 
 from sorteia.operations import Sortings
-from sorteia.utils import PyObjectId
-
-from loguru import logger
 
 
 class Thing(BaseModel):
     id: PyObjectId = Field(alias="_id")
     name: str
-    created_by: dict[str, Any]
+    created_by: Infostar
 
 
 load_dotenv()
@@ -38,13 +37,41 @@ def sorting_instance() -> Sortings:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def creators_instances() -> list[Creator]:
+def infostar_instances() -> list[Infostar]:
     return [
-        Creator(
-            user_email="user@teialabs.com", client_name="client", token_name="token"
+        Infostar(
+            request_id=PyObjectId(),
+            apikey_name="teialabs",
+            authprovider_type="auth0",
+            authprovider_org="teialabs",
+            extra=InfostarExtra(
+                geolocation="",
+                jwt_sub="",
+                os="",
+                url="",
+                user_agent="",
+            ),
+            service_handle="allai--code",
+            user_handle="teialabs@teialabs.com",
+            user_owner_handle="teialabs",
+            client_ip="",
         ),
-        Creator(
-            user_email="user2@teialabs.com", client_name="client", token_name="token"
+        Infostar(
+            request_id=PyObjectId(),
+            apikey_name="teialabs",
+            authprovider_type="auth0",
+            authprovider_org="teialabs",
+            extra=InfostarExtra(
+                geolocation="",
+                jwt_sub="",
+                os="",
+                url="",
+                user_agent="",
+            ),
+            service_handle="allai--code",
+            user_handle="teialabs-instance2@teialabs.com",
+            user_owner_handle="teialabs",
+            client_ip="",
         ),
     ]
 
@@ -53,14 +80,14 @@ def creators_instances() -> list[Creator]:
 def populate_db(
     mongo_connection: Database[Any],
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
 ) -> list[Thing]:
     db = mongo_connection
     objects = [
         {
             "_id": PyObjectId(),
             "name": f"thing{i}",
-            "created_by": creators_instances[0].model_dump(by_alias=True),
+            "created_by": infostar_instances[0].model_dump(by_alias=True),
         }
         for i in range(1, 4)
     ]
@@ -69,15 +96,16 @@ def populate_db(
             {
                 "_id": PyObjectId(),
                 "name": f"thing{i}",
-                "created_by": creators_instances[1].model_dump(by_alias=True),
+                "created_by": infostar_instances[1].model_dump(by_alias=True),
             }
         )
 
     db["things-test"].insert_many(objects)
     sorting_instance.reorder_one(
-        creator=creators_instances[1],
-        resource_id=objects[-1]["_id"],  # type: ignore
+        infostar=infostar_instances[1],
+        resource_id=objects[-1]["_id"],
         position=2,
+        background_task=None,
     )
 
     return [Thing(**obj) for obj in objects]  # type: ignore

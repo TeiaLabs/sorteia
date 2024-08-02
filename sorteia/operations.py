@@ -6,12 +6,11 @@ import pymongo
 import pymongo.command_cursor
 import pymongo.cursor
 import pymongo.results
-from annotated_types import T
 from dotenv import find_dotenv, load_dotenv
 from fastapi import BackgroundTasks
 from loguru import logger
-from redbaby.database import DB  # type: ignore
-from tauth.schemas import Creator  # type: ignore
+from redbaby.database import DB
+from tauth.schemas import Infostar
 
 from .exceptions import (
     CustomOrderNotFound,
@@ -26,7 +25,7 @@ from .schemas import (
     ReorderOneUpdatedOut,
     ReorderOneUpsertedOut,
 )
-from .utils import PyObjectId  # type: ignore
+from redbaby.pyobjectid import PyObjectId
 
 load_dotenv(find_dotenv())
 
@@ -35,8 +34,8 @@ DB_NAME = os.getenv("DB_NAME")
 
 # db connection to add custom sortings
 DB.add_conn(
-    db_name=DB_NAME,
-    uri=MONGO_URI,
+    db_name=DB_NAME,  # type: ignore
+    uri=MONGO_URI,  # type: ignore
     alias="default",
     start_client=True,
 )
@@ -75,7 +74,7 @@ class Sortings:
         self,
         collection_name: str,
         alias: str = "default",
-        db_name: str = DB_NAME,
+        db_name: str = DB_NAME,  # type: ignore
     ):
         """Initializes the object to use its core operations.
 
@@ -100,7 +99,7 @@ class Sortings:
 
     def reorder_one(
         self,
-        creator: Creator,
+        infostar: Infostar,
         resource_id: PyObjectId,
         position: int,
         background_task: BackgroundTasks | None,
@@ -108,7 +107,7 @@ class Sortings:
         """Reorders a resource in the custom order.
 
         Args:
-            creator(Creator): Creator object
+            infostar(Infostar): Infostar object.
             resource_id(PyObjectId): ObjectId of the resource to be ordered
             position(int): position to be set (0 is the first position)
 
@@ -122,23 +121,31 @@ class Sortings:
         """
 
         # check if user is owner of that resource to reorder it
-        logger.debug(
-            f"Searching for object to be sorted on {self.collection} on {DB.get().name}"
-        )
+        logger.debug(f"Searching for object to be sorted on {self.collection}")
         object_sorted = self.database[self.collection].find_one(
             filter={
                 "_id": resource_id,
-                "created_by.user_email": creator.user_email,
+                "created_by.user_handle": infostar.user_handle,
+                "created_by.authprovider_org": infostar.authprovider_org,
             }
         )
         if object_sorted is None:
             raise ObjectToBeSortedNotFound
+        logger.debug("Object to be sorted found")
 
-        max_position: int = self.database[self.collection].count_documents(
-            filter={
-                "created_by.user_email": creator.user_email,
-            }
+        max_position: int = (
+            self.database[self.collection].count_documents(
+                filter={
+                    "created_by.user_handle": infostar.user_handle,
+                    "created_by.authprovider_org": infostar.authprovider_org,
+                }
+            )
+            - 1  # position start at 0
         )
+        # last position
+        if position == -1:
+            position = max_position
+
         if position > max_position or position < 0:
             raise PositionOutOfBounds(
                 message=f"Position out of bounds: {position} cannot be bigger than {max_position}",
@@ -147,12 +154,15 @@ class Sortings:
                     "position": position,
                 },
             )
+        logger.debug(f"Position is within bounds - bound: {max_position}")
 
         filter = {
             "resource_collection": self.collection,
             "resource_id": resource_id,
-            "created_by.user_email": creator.user_email,
+            "created_by.user_handle": infostar.user_handle,
+            "created_by.authprovider_org": infostar.authprovider_org,
         }
+        logger.debug(f"Filter to search for the object to be sorted created: {filter}")
 
         updated_at = datetime.now()
         created_at = datetime.now()
@@ -166,7 +176,7 @@ class Sortings:
             "$set": custom_sorting,
             "$setOnInsert": {
                 "created_at": created_at,
-                "created_by": creator.model_dump(by_alias=True),
+                "created_by": infostar.model_dump(by_alias=True),
             },
         }
 
@@ -175,13 +185,16 @@ class Sortings:
             update=update,
             upsert=True,
         )
+        logger.debug(
+            f"Object sorted updated or inserted on the custom sortings collection: {result}"
+        )
 
         if result.upserted_id is not None:
             result = ReorderOneUpsertedOut(
                 id=result.upserted_id,
                 created_at=created_at,
                 updated_at=updated_at,
-                created_by=creator,
+                created_by=infostar,
             )
         elif result.modified_count == 1 or result.matched_count == 1:
             object = self.sortings.find_one(filter=filter)
@@ -195,12 +208,14 @@ class Sortings:
             raise CustomOrderNotSaved
 
         if background_task:
+            logger.debug("Background task to update the other objects positions")
             background_task.add_task(
                 self.sortings.update_many,
                 filter={
                     "position": {"$gt": position},
                     "resource_collection": self.collection,
-                    "created_by.user_email": creator.user_email,
+                    "created_by.user_handle": infostar.user_handle,
+                    "created_by.authprovider_org": infostar.authprovider_org,
                 },
                 update={"$inc": {"position": 1}},
             )
@@ -209,7 +224,7 @@ class Sortings:
     def reorder_many(
         self,
         resources: list[ReorderManyResourcesIn],
-        creator: Creator,
+        infostar: Infostar,
     ) -> pymongo.results.BulkWriteResult:
         """Reorders many resources in the custom order sent as body.
 
@@ -227,7 +242,7 @@ class Sortings:
 
         Args:
             resources(list[ReorderManyResourcesIn]): resources to be reordered.
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
 
         Returns:
             BulkWriteResult object from pymongo.
@@ -238,13 +253,14 @@ class Sortings:
         """
         max_position: int = self.database[self.collection].count_documents(
             filter={
-                "created_by.user_email": creator.user_email,
+                "created_by.user_handle": infostar.user_handle,
+                "created_by.authprovider_org": infostar.authprovider_org,
             }
         )
         for resource in resources:
             if resource.position > max_position or resource.position < 0:
                 raise PositionOutOfBounds(
-                    message=f"Position out of bounds - position cannot be higher than the total amount of elements to be sorted.",
+                    message="Position out of bounds - position cannot be higher than the total amount of elements to be sorted.",
                     detail={
                         "max_position": max_position,
                         "position": resource.position,
@@ -257,7 +273,8 @@ class Sortings:
                     filter={
                         "resource_collection": self.collection,
                         "resource_id": resource.resource_id,
-                        "created_by.user_email": creator.user_email,
+                        "created_by.user_handle": infostar.user_handle,
+                        "created_by.authprovider_org": infostar.authprovider_org,
                     },
                     update={
                         "$set": {
@@ -266,7 +283,7 @@ class Sortings:
                         },
                         "$setOnInsert": {
                             "created_at": datetime.now(),
-                            "created_by": creator.model_dump(by_alias=True),
+                            "created_by": infostar.model_dump(by_alias=True),
                         },
                     },
                     upsert=True,
@@ -276,11 +293,14 @@ class Sortings:
         )
         return result
 
-    def read_many(self, creator: Creator) -> list[CustomSorting]:
+    def read_many(
+        self,
+        infostar: Infostar,
+    ) -> list[CustomSorting]:
         """Returns the objects in the order they were sorted.
 
         Args:
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
 
         Returns:
             a list of CustomSorting objects.
@@ -289,19 +309,21 @@ class Sortings:
         custom_sortings: pymongo.cursor.Cursor[Any] = self.sortings.find(
             filter={
                 "resource_collection": self.collection,
-                "created_by.user_email": creator.user_email,
+                "created_by.user_handle": infostar.user_handle,
+                "created_by.authprovider_org": infostar.authprovider_org,
             }
         ).sort("position", pymongo.ASCENDING)
 
         return list(custom_sortings)
 
     def read_many_whole_object(
-        self, creator: Creator
+        self,
+        infostar: Infostar,
     ) -> list[CustomSortingWithResource[T]]:
         """Returns the objects in the order they were sorted.
 
         Args:
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
 
         Returns:
             a list of CustomSortingWithResource objects.
@@ -313,7 +335,8 @@ class Sortings:
                     {
                         "$match": {
                             "resource_collection": self.collection,
-                            "created_by.user_email": creator.user_email,
+                            "created_by.user_handle": infostar.user_handle,
+                            "created_by.authprovider_org": infostar.authprovider_org,
                         }
                     },
                     {
@@ -341,22 +364,99 @@ class Sortings:
         )
         return list(custom_sortings)
 
+    def read_many_entire_collection(
+        self,
+        infostar: Infostar,
+        offset: int,
+        limit: int,
+        projection: dict[str, Any] | None = None,
+        **filters,
+    ) -> pymongo.command_cursor.CommandCursor[Any]:
+        """Returns the objects in the order they were sorted, and adds the objects
+          that were not sorted yet at the end of the list (sorted by created_at).
+
+        Args:
+            infostar(Infostar): Infostar object.
+            offset(int): number of objects to skip.
+            limit(int): number of objects to return.
+            projection(dict[str, Any]): projection to be applied to the find query.
+            **filters: filters to be applied to the find query on the `model` collection.
+
+        Returns:
+            CommandCursor object from pymongo (Iterable).
+        """
+        object_colletion = self.database[self.collection]
+
+        filtering = {k: v for k, v in filters.items() if v is not None}
+
+        projection = projection or {}
+        aggregation = [
+            {
+                "$match": filtering,
+            },
+            {
+                "$lookup": {
+                    "from": "custom-sortings",
+                    "localField": "_id",
+                    "foreignField": "resource_id",
+                    "as": "order",
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$order",
+                    "preserveNullAndEmptyArrays": True,
+                }
+            },
+            {
+                "$addFields": {
+                    "order.position": {"$ifNull": ["$order.position", float("inf")]}
+                }
+            },
+            {
+                "$sort": {
+                    "order.position": pymongo.ASCENDING,
+                    "created_at": pymongo.DESCENDING,
+                }
+            },
+            {
+                "$skip": offset,
+            },
+            {
+                "$limit": limit,
+            },
+            {"$project": {"order": 0, **projection}},
+        ]
+
+        sorted_objects = object_colletion.aggregate(aggregation)
+        return sorted_objects
+
     def delete_one(
-        self, position: int, creator: Creator, background_task: BackgroundTasks | None
+        self,
+        resource_id: PyObjectId,
+        infostar: Infostar,
+        background_task: BackgroundTasks | None,
     ) -> pymongo.results.DeleteResult:
         """Deletes a resource from the custom order according to the position.
 
         Args:
             position(int): position to be deleted.
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
             background_task(BackgroundTasks): send None to not update the other objects positions after deletion.
 
         Raises:
             CustomOrderNotFound: if the custom order could not be found to be deleted.
         """
-        user_email = creator.user_email
+        user_email = infostar.user_handle
 
-        filter = {"position": position, "created_by.user_email": user_email}
+        filter = {
+            "resource_id": resource_id,
+            "created_by.user_handle": user_email,
+            "created_by.authprovider_org": infostar.authprovider_org,
+        }
+        sorting = self.sortings.find_one(filter)
+        if sorting is None:
+            raise CustomOrderNotFound
         result: pymongo.results.DeleteResult = self.sortings.delete_one(filter)
 
         if result.deleted_count == 0:
@@ -366,26 +466,29 @@ class Sortings:
             background_task.add_task(
                 self.sortings.update_many,
                 filter={
-                    "position": {"$gt": position},
+                    "position": {"$gt": sorting["position"]},
                     "resource_collection": self.collection,
-                    "created_by.user_email": user_email,
+                    "created_by.user_handle": user_email,
+                    "created_by.authprovider_org": infostar.authprovider_org,
                 },
                 update={"$inc": {"position": -1}},
             )
         return result
 
     def read_all_ordered_objects(
-        self, creator: Creator, model: Type[T], **filters
+        self, infostar: Infostar, model: Type[T], **filters
     ) -> list[T]:
-        """Reads all objects from the collection already sorted by the custom order.
+        """Reads all objects from the collection already sorted by the custom order. (Loads on memory to sort)
+
 
         Args:
-            creator(Creator): Creator object.
+            infostar(Infostar): Infostar object.
             model(Type[T]): Pydantic model to be used to create the objects.
             **filters: filters to be applied to the find query on the `model` collection.
         """
         query: dict[str, Any] = {k: v for k, v in filters.items() if v is not None}
 
+        logger.debug(f"Searching for objects in the collection {self.collection}")
         unordered_objs: pymongo.cursor.Cursor[Any] = self.database[
             self.collection
         ].find(query)
@@ -394,13 +497,13 @@ class Sortings:
             f"Found {len(unordered_objs_list)} objects in the original collection"
         )
 
-        sorted_objs: list[CustomSortingWithResource[model]] = (
-            self.read_many_whole_object(creator)
+        sorted_objs: list[CustomSortingWithResource[T]] = self.read_many_whole_object(
+            infostar
         )
         logger.debug(f"Found {len(sorted_objs)} objects of these already sorted")
 
         custom_sortings_set: Set[PyObjectId] = {
-            obj["resource_id"] for obj in sorted_objs
+            obj["resource_id"] for obj in sorted_objs  # type: ignore
         }
         filtered_objs: list[model] = [
             obj for obj in unordered_objs_list if obj["_id"] not in custom_sortings_set
@@ -411,7 +514,7 @@ class Sortings:
 
         for sorting in sorted_objs:
             obj = model(**sorting["resource"], _id=sorting["resource_id"])  # type: ignore
-            filtered_objs.insert(sorting["position"], obj)
+            filtered_objs.insert(sorting["position"], obj)  # type: ignore
 
         return filtered_objs
 

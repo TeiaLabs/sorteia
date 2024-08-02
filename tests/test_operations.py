@@ -2,7 +2,7 @@ from typing import Any
 
 from pymongo.database import Database
 from pytest import raises
-from tauth.schemas import Creator  # type: ignore
+from tauth.schemas import Infostar
 
 from sorteia.exceptions import (
     CustomOrderNotFound,
@@ -16,19 +16,22 @@ from sorteia.schemas import (
     ReorderOneUpdatedOut,
     ReorderOneUpsertedOut,
 )
-from sorteia.utils import PyObjectId
+from redbaby.pyobjectid import PyObjectId
 
 from .conftest import Thing
 
 
 def test_reorder_one_upsert(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     result = sorting_instance.reorder_one(
-        creator=creators_instances[0], resource_id=populate_db[0].id, position=2
+        infostar=infostar_instances[0],
+        resource_id=populate_db[0].id,
+        position=2,
+        background_task=None,
     )
     assert isinstance(result, ReorderOneUpsertedOut)
     assert result.id
@@ -41,14 +44,15 @@ def test_reorder_one_upsert(
 
 def test_reorder_one_update(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     result = sorting_instance.reorder_one(
-        creator=creators_instances[0],
+        infostar=infostar_instances[0],
         resource_id=populate_db[0].id,
         position=1,
+        background_task=None,
     )
     assert isinstance(result, ReorderOneUpdatedOut)
     assert result.id
@@ -61,24 +65,30 @@ def test_reorder_one_update(
 
 def test_reorder_one_invalid_position(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     with raises(PositionOutOfBounds):
         sorting_instance.reorder_one(
-            creator=creators_instances[0], resource_id=populate_db[0].id, position=100
+            infostar=infostar_instances[0],
+            resource_id=populate_db[0].id,
+            position=100,
+            background_task=None,
         )
 
     with raises(PositionOutOfBounds):
         sorting_instance.reorder_one(
-            creator=creators_instances[0], resource_id=populate_db[0].id, position=-1
+            infostar=infostar_instances[0],
+            resource_id=populate_db[0].id,
+            position=-1,
+            background_task=None,
         )
 
 
 def test_reorder_many_invalid_positions(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
@@ -96,7 +106,7 @@ def test_reorder_many_invalid_positions(
                     position=100,
                 ),
             ],
-            creator=creators_instances[0],
+            infostar=infostar_instances[0],
         )
 
     with raises(PositionOutOfBounds):
@@ -113,13 +123,13 @@ def test_reorder_many_invalid_positions(
                     position=-1,
                 ),
             ],
-            creator=creators_instances[0],
+            infostar=infostar_instances[0],
         )
 
 
 def test_reorder_many(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
@@ -132,7 +142,7 @@ def test_reorder_many(
         ),
     ]
     result = sorting_instance.reorder_many(
-        resources=body, creator=creators_instances[0]
+        resources=body, infostar=infostar_instances[0]
     )
     assert result
 
@@ -156,23 +166,26 @@ def test_reorder_many(
 
 def test_reorder_one_with_invalid_id(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     with raises(ObjectToBeSortedNotFound):
         sorting_instance.reorder_one(
-            creator=creators_instances[0], resource_id=PyObjectId(), position=2
+            infostar=infostar_instances[0],
+            resource_id=PyObjectId(),
+            position=2,
+            background_task=None,
         )
 
 
 def test_read_many_ordered(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
-    result = sorting_instance.read_many(creator=creators_instances[0])
+    result = sorting_instance.read_many(infostar=infostar_instances[0])
     assert len(result) == 3
 
     # populate_db[1]
@@ -185,23 +198,23 @@ def test_read_many_ordered(
 
 def test_read_many_not_creator(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
-    result = sorting_instance.read_many(creator=creators_instances[1])
+    result = sorting_instance.read_many(infostar=infostar_instances[1])
     assert len(result) == 1
     assert result[0]["resource_id"] == populate_db[-1].id  # type: ignore
 
 
 def test_read_many_wholeobject(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     result: list[CustomSortingWithResource[Any]] = (
-        sorting_instance.read_many_whole_object(creator=creators_instances[0])
+        sorting_instance.read_many_whole_object(infostar=infostar_instances[0])
     )
     assert len(result) == 3
 
@@ -212,12 +225,14 @@ def test_read_many_wholeobject(
 
 def test_delete_custom_order(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     result = sorting_instance.delete_one(
-        position=2, creator=creators_instances[0], background_task=None
+        resource_id=populate_db[1].id,
+        infostar=infostar_instances[0],
+        background_task=None,
     )
 
     assert result
@@ -227,25 +242,27 @@ def test_delete_custom_order(
     )
     assert custom_order is None
 
-    rest = sorting_instance.read_many(creator=creators_instances[0])
+    rest = sorting_instance.read_many(infostar=infostar_instances[0])
     assert len(rest) == 2
 
 
 def test_delete_nonexistant_custom_order(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):
     with raises(CustomOrderNotFound):
         sorting_instance.delete_one(
-            position=100, creator=creators_instances[0], background_task=None
+            resource_id=PyObjectId(),
+            infostar=infostar_instances[0],
+            background_task=None,
         )
 
 
 def test_delete_one_with_background_task(
     sorting_instance: Sortings,
-    creators_instances: list[Creator],
+    infostar_instances: list[Infostar],
     populate_db: list[Thing],
     mongo_connection: Database[Any],
 ):  # still need to figure out how to mock the background task
