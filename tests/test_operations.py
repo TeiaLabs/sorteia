@@ -230,7 +230,9 @@ def test_delete_custom_order(
     mongo_connection: Database[Any],
 ):
     result = sorting_instance.delete_one(
-        position=2, infostar=infostar_instances[0], background_task=None
+        resource_id=populate_db[1].id,
+        infostar=infostar_instances[0],
+        background_task=None,
     )
 
     assert result
@@ -252,7 +254,9 @@ def test_delete_nonexistant_custom_order(
 ):
     with raises(CustomOrderNotFound):
         sorting_instance.delete_one(
-            position=100, infostar=infostar_instances[0], background_task=None
+            resource_id=PyObjectId(),
+            infostar=infostar_instances[0],
+            background_task=None,
         )
 
 

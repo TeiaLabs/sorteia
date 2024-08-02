@@ -144,7 +144,7 @@ class Sortings:
         )
         # last position
         if position == -1:
-            position = int("inf")
+            position = max_position
 
         if position > max_position or position < 0:
             raise PositionOutOfBounds(
@@ -432,7 +432,10 @@ class Sortings:
         return sorted_objects
 
     def delete_one(
-        self, position: int, infostar: Infostar, background_task: BackgroundTasks | None
+        self,
+        resource_id: PyObjectId,
+        infostar: Infostar,
+        background_task: BackgroundTasks | None,
     ) -> pymongo.results.DeleteResult:
         """Deletes a resource from the custom order according to the position.
 
@@ -447,10 +450,13 @@ class Sortings:
         user_email = infostar.user_handle
 
         filter = {
-            "position": position,
+            "resource_id": resource_id,
             "created_by.user_handle": user_email,
             "created_by.authprovider_org": infostar.authprovider_org,
         }
+        sorting = self.sortings.find_one(filter)
+        if sorting is None:
+            raise CustomOrderNotFound
         result: pymongo.results.DeleteResult = self.sortings.delete_one(filter)
 
         if result.deleted_count == 0:
@@ -460,7 +466,7 @@ class Sortings:
             background_task.add_task(
                 self.sortings.update_many,
                 filter={
-                    "position": {"$gt": position},
+                    "position": {"$gt": sorting["position"]},
                     "resource_collection": self.collection,
                     "created_by.user_handle": user_email,
                     "created_by.authprovider_org": infostar.authprovider_org,

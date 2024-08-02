@@ -8,8 +8,10 @@ from fastapi import (
     HTTPException,
 )
 from loguru import logger
+from redbaby.pyobjectid import PyObjectId
 from tauth.schemas import Infostar
 
+from sorteia import state_getter
 from sorteia.exceptions import (
     CustomOrderNotFound,
     CustomOrderNotSaved,
@@ -26,7 +28,6 @@ from ..schemas import (
     ReorderOneUpdatedOut,
     ReorderOneUpsertedOut,
 )
-from sorteia import state_getter
 
 
 def add_sorting_resources_dependency(app: FastAPI) -> None:
@@ -101,11 +102,13 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
                 detail=f"{e.message} - {e.detail}",
             )
 
-    @router.delete("/{resource}/{position}", status_code=204)
-    @router.delete("/{resource}/{position}/", status_code=204, include_in_schema=False)
+    @router.delete("/{resource}/{resource_id}", status_code=204)
+    @router.delete(
+        "/{resource}/{resource_id}/", status_code=204, include_in_schema=False
+    )
     def delete_sorting(
         resource: str,
-        position: int,
+        resource_id: PyObjectId,
         background_task: BackgroundTasks,
         infostar: Infostar = Depends(state_getter.get("infostar")),
     ) -> None:
@@ -123,7 +126,7 @@ def add_sorting_resources_dependency(app: FastAPI) -> None:
         org = infostar.authprovider_org
         try:
             Sortings(collection_name=resource, alias=org, db_name=org).delete_one(
-                position, infostar, background_task
+                resource_id, infostar, background_task
             )
         except CustomOrderNotFound:
             logger.error("Custom sorting to be deleted was not found.")
