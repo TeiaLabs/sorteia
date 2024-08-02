@@ -4,3 +4,4 @@ fastapi>=0.100.0
 loguru
 pydantic==2.7.1
 redbaby 
+tauth==2.0.0
