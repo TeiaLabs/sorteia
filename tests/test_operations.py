@@ -81,7 +81,7 @@ def test_reorder_one_invalid_position(
         sorting_instance.reorder_one(
             infostar=infostar_instances[0],
             resource_id=populate_db[0].id,
-            position=-1,
+            position=-2,
             background_task=None,
         )
 
