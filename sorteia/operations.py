@@ -305,7 +305,6 @@ class Sortings:
         Returns:
             a list of CustomSorting objects.
         """
-        # TODO: change this Any to specific type
         custom_sortings: pymongo.cursor.Cursor[Any] = self.sortings.find(
             filter={
                 "resource_collection": self.collection,
@@ -503,7 +502,8 @@ class Sortings:
         logger.debug(f"Found {len(sorted_objs)} objects of these already sorted")
 
         custom_sortings_set: Set[PyObjectId] = {
-            obj["resource_id"] for obj in sorted_objs  # type: ignore
+            obj["resource_id"]
+            for obj in sorted_objs  # type: ignore
         }
         filtered_objs: list[model] = [
             obj for obj in unordered_objs_list if obj["_id"] not in custom_sortings_set

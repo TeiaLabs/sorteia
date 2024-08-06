@@ -14,30 +14,13 @@ class ReorderManyResourcesIn(BaseModel):
     resource_ref: str
     position: int
 
-    class Config:
-        examples = {
-            "reorder-many": {
-                "value": [
-                    {
-                        "resource_id": "resource.$id",
-                        "resource_ref": "resource.$ref",
-                        "position": 0,
-                    },
-                    {
-                        "resource_id": "resourceid2",
-                        "resource_ref": "resourceref2",
-                        "position": 1,
-                    },
-                ]
-            }
-        }
+
+class ReorderManyResourcesInList(BaseModel):
+    resources: list[ReorderManyResourcesIn]
 
 
 class ReorderOneResourceIn(BaseModel):
     resource_id: PyObjectId
-
-    class Config:
-        examples = {"reorder-one": {"value": {"resource_id": "pyobjectid"}}}
 
 
 class ReorderOneUpsertedOut(BaseModel):
