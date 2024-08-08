@@ -4,5 +4,5 @@ fastapi>=0.100.0
 loguru~=0.7
 pydantic>=2,<3
 redbaby==1.0.3
-tauth[first_party]==2.0.0.post3
+tauth[first_party]==2.0.1
 melting_schemas==3.0.1
